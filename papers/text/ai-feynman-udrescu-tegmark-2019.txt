@@ -1,0 +1,2778 @@
+AI Feynman: a Physics-Inspired Method for Symbolic Regression
+Silviu-Marian Udrescu, Max Tegmark∗
+Dept. of Physics & Center for Brains, Minds & Machines,
+Massachusetts Institute of Technology, Cambridge, MA 02139; sudrescu@mit.edu and
+Theiss Research, La Jolla, CA 92037, USA
+
+arXiv:1905.11481v2 [physics.comp-ph] 15 Apr 2020
+
+(Dated: Published in Science Advances, 6:eaay2631, April 15, 2020)
+A core challenge for both physics and artificial intelligence (AI) is symbolic regression: finding
+a symbolic expression that matches data from an unknown function. Although this problem is
+likely to be NP-hard in principle, functions of practical interest often exhibit symmetries, separability, compositionality and other simplifying properties. In this spirit, we develop a recursive
+multidimensional symbolic regression algorithm that combines neural network fitting with a suite of
+physics-inspired techniques. We apply it to 100 equations from the Feynman Lectures on Physics,
+and it discovers all of them, while previous publicly available software cracks only 71; for a more
+difficult physics-based test set, we improve the state of the art success rate from 15% to 90%.
+
+I.
+
+INTRODUCTION
+
+In 1601, Johannes Kepler got access to the world’s best
+data tables on planetary orbits, and after 4 years and
+about 40 failed attempts to fit the Mars data to various
+ovoid shapes, he launched a scientific revolution by discovering that Mars’ orbit was an ellipse [1]. This was
+an example of symbolic regression: discovering a symbolic expression that accurately matches a given data
+set. More specifically, we are given a table of numbers, whose rows are of the form {x1 , ..., xn , y} where
+y = f (x1 , ..., xn ), and our task is to discover the correct
+symbolic expression for the unknown mystery function f ,
+optionally including the complication of noise.
+Growing data sets have motivated attempts to automate
+such regression tasks, with significant success. For the
+special case where the unknown function f is a linear
+combination of known functions of {x1 , ..., xn }, symbolic
+regression reduces to simply solving a system of linear
+equations. Linear regression (where f is simply an affine
+function) is ubiquitous in the scientific literature, from
+finance to psychology. The case where f is a linear combination of monomials in {x1 , ..., xn } corresponds to linear regression with interaction terms, and to polynomial
+fitting more generally. There are countless other examples of popular regression functions that are linear combinations of known functions, ranging from Fourier expansions to wavelet transforms. Despite these successes
+with special cases, the general symbolic regression problem remains unsolved, and it is easy to see why: If we
+encode functions as strings of symbols, then the number
+of such strings grows exponentially with string length, so
+if we simply test all strings by increasing length, it may
+take longer than the age of our universe until we get to
+the function we are looking for.
+This combinatorial challenge of an exponentially large
+
+∗ Corresponding author. Email: tegmark@mit.edu
+
+search space characterizes many famous classes of problems, from codebreaking and Rubik’s cube to the natural selection problem of finding those genetic codes that
+produce the most evoutionarily fit organisms. This has
+motivated genetic algorithms [2, 3] for targeted searches
+in exponentially large spaces, which replace the abovementioned brute-force search by biology-inspired strategies of mutation, selection, inheritance and recombination; crudely speaking, the role of genes is played by useful symbol strings that may form part of the sought-after
+formula or program. Such algorithms have been successfully applied to areas ranging from design of antennas
+[4, 5] and vehicles [6] to wireless routing [7], vehicle routing [8], robot navigation [9], code breaking [10], discovering partial differential equations [11], investment strategy
+[12], marketing [13], classification [14], Rubik’s cube [15],
+program synthesis [16] and metabolic networks [17].
+The symbolic regression problem for mathematical functions (the focus of this paper) has been tackled with a
+variety of methods [18–20], including sparse regression
+[21–24] and genetic algorithms [25, 26]. By far the most
+successful of these is, as we will see in Section III, the genetic algorithm outlined in [27] and implemented in the
+commercial Eureqa software [26].
+The purpose of this paper is to further improve on this
+state-of-the-art, using physics-inspired strategies enabled
+by neural networks. Our most important contribution is
+using neural networks to discover hidden simplicity such
+as symmetry or separability in the mystery data, which
+enables us to recursively break harder problems into simpler ones with fewer variables. The rest of this paper is
+organized as follows. In Section II, we present our algorithm and the six strategies that it recursively combines.
+In Section III, we present a test suite of regression mysteries and use it to test both Eureqa and our new algorithm, finding major improvements. In Section IV, we
+summarize our conclusions and discuss opportunities for
+further progress.
+
+2
+
+Data
+
+x
+y
+-0.570631 -0.553583
+0.883785
+0.817601
+-1.145615
+0.546180
+1.571480 -2.166711
+...
+...
+
+f
+-1.677797
+2.518988 .
+-0.053256 .
+-2.761942 .
+...
+
+Dimensional
+analysis
+
+Dimensional
+analysis
+
+Solved? Yes
+No
+
+Polynomial
+fit
+Solved? Yes
+
+Translational
+symmetry
+
+No
+
+Brute
+force
+
+Solved?
+
+Yes
+
+No
+
+Try new data with
+fewer variables
+Solved?
+
+Train neural
+network
+Yes Symmetry?
+No
+
+Yes
+No
+
+Make 2 new data sets
+with fewer variables
+
+Try new data with
+fewer variables
+
+No
+
+Equate
+variables
+
+Invert
+
+Transform
+x&y
+
+Polynomial
+fit
+
+Polynomial
+fit
+
+Yes
+No
+
+Try transformed
+data
+Solved?
+
+Multiplicative
+separability
+
+Yes Separable?
+
+Solved? Yes
+No
+
+Solved?
+
+Translational
+symmetry
+
+Yes
+
+No
+Fail
+
+Equation
+
+FIG. 1: Schematic illustration of our AI Feynman algorithm.
+It is iterative as described in the text, with four of the steps
+capable of generating new mystery data sets that get sent to
+fresh instantiations of the the algorithm which may or may
+not return a solution.
+
+FIG. 2: Example: how our AI Feynman algorithm discovered mystery Equation 5. Given a mystery table with many
+examples of the gravitational force F together with the 9
+independent variables G, m1 , m2 , x1 ,..., z2 , this table was
+recursively transformed into simpler ones until the correct
+equation was found. First dimensional analysis generated a
+table of 6 dimensionless independent variables a = m2 /m1 ,
+..., f = z1 /x1 and the dimensionless dependent variable
+F ≡ F ÷ Gm21 /x21 . Then a neural network was trained to
+fit this function, which revealed two translational symmetries
+(each eliminating one variable, by defining g ≡ c − d and
+h ≡ e − f ) as well as multiplicative separability, enabling
+the factorization F(a, b, g, h) = G(a)H(b, g, h), thus splitting
+the problem into two simpler ones. Both G and H then were
+solved by polynomial fitting, the latter after applying one of a
+series of simple transformations (in this case, inversion). For
+many other mysteries, the final step was instead solved using
+brute-force symbolic search as described in the text.
+
+3
+II.
+
+A.
+
+METHODS
+
+Generic functions f (x1 , ..., xn ) are extremely complicated
+and near-impossible for symbolic regression to discover.
+However, functions appearing in physics and many other
+scientific applications often have some of the following
+simplifying properties that make them easier to discover:
+
+1. Units: f and the variables upon which it depends
+have known physical units
+
+Overall Algorithm
+
+The overall algorithm 1 is schematically illustrated in Figure 1. It consists of a series of modules that try to exploit each of the the above-mentioned properties. Like a
+human scientist, it tries many different strategies (modules) in turn, and if it cannot solve the full problem in
+one fell swoop, it tries to transform it and divide it into
+simpler pieces that can be tackled separately, recursively
+re-launching the full algorithm on each piece. Figure 2 illustrates an example of how a particular mystery data set
+(Newton’s law of gravitation with 9 variables) is solved.
+Below we describe each of these algorithm modules in
+turn.
+
+2. Low-order polynomial: f (or part thereof) is a
+polynomial of low degree
+3. Compositionality: f is a composition of a small
+set of elementary functions, each typically taking
+no more than two arguments
+4. Smoothness: f is continuous and perhaps even
+analytic in its domain
+5. Symmetry: f exhibits translational, rotational or
+scaling symmetry with respect to some of its variables
+6. Separability: f can be written as a sum or product of two parts with no variables in common
+
+The question of why these properties are common remains controversial and not fully understood [28, 29].
+However, as we will see below, this does not prevent us
+from discovering and exploiting these properties to facilitate symbolic regression.
+Property (1) enables dimensional analysis, which often
+transforms the problem into a simpler one with fewer
+independent variables. Property (2) enables polynomial
+fitting, which quickly solves the problem by solving a
+system of linear equations to determine the polynomial
+coefficients. Property (3) enables f to be represented as a
+parse tree with a small number of node types, sometimes
+enabling f or a sub-expression to be found via a bruteforce search. Property (4) enables approximating f using
+a feed forward neural network with a smooth activation
+function. Property (5) can be confirmed using said neural
+network and enables the problem to be transformed into
+a simpler one with one independent variable less (or even
+fewer for n > 2 rotational symmetry). Property (6) can
+be confirmed using said neural network and enables the
+independent variables to be partitioned into two disjoint
+sets, and the problem to be transformed into two simpler
+ones, each involving the variables from one of these sets.
+
+B.
+
+Dimensional Analysis
+
+Our dimensional analysis module exploits the well-known
+fact that many problems in physics can be simplified by
+requiring the units of the two sides of an equation to
+match. This often transforms the problem into a simpler
+one with a smaller number of variables that are all dimensionless. In the best case scenario, the transformed
+problem involves solving for a function of zero variables,
+i.e., a constant. We automate dimensional analysis as
+follows.
+Table III shows the physical units of all variables appearing in our 100 mysteries, expressed as products of
+the fundamental units (meter, second, kilogram, kelvin,
+volt) to various integer powers. We thus represent the
+units of each variable by a vector u of 5 integers as in
+the table. For a mystery of the form y = f (x1 , ..., xn ),
+we define the matrix M whose ith column is the u-vector
+corresponding to the variable xi , and define the vector b
+as the u-vector corresponding to y. We now let the vector
+p be a solution to the equation Mp = b and the columns
+of the matrix U form a basis for the null space, so that
+MU = 0, and define a new mystery y 0 = f 0 (x01 , ..., x0n )
+where
+x0i ≡
+
+n
+Y
+i=j
+
+xj Uij ,
+
+y0 ≡
+
+y
+,
+y∗
+
+y∗ ≡
+
+n
+Y
+
+x i pi .
+
+(1)
+
+i=1
+
+By construction, the new variables x0i and y 0 are dimensionless, and the number n0 of new variables is equal to
+the dimensionality of the null space. When n0 > 0, we
+have the freedom to choose any basis we want for the null
+space and also to replace p by a vector of the form p+Ua
+for any vector a; we use this freedom to set as many elements as possible in p and U equal to zero, i.e., to make
+
+1 The
+
+code is publicly available at https://github.com/
+SJ001/AI-Feynman.
+
+4
+the new variables depend on as few old variables as possible. This choice is useful because it typically results in
+the resulting powers of the dimensionless variables being
+integers, making the final expression much easier to find
+than when the powers are fractions or irrational numbers.
+
+C.
+
+Polynomial Fit
+
+Many functions f (x1 , ..., xn ) in physics and other sciences either are low-order polynomials, e.g., the kinetic
+2
+2
+2
+energy K = m
+2 (vx + vy + vz ), or have parts that are,
+e.g., the denominator of the gravitational force F =
+Gm1 m2
+(x1 −x2 )2 +(y1 −y2 )2 +(z1 −z2 )2 . We therefore include a module that tests if a mystery can be solved by a low-order
+polynomial. Our method uses the standard method of
+solving a system of linear equations to find the best fit
+polynomial coefficients. It tries fitting the mystery data
+to polynomials of degree 0, 1, ..., dmax = 4 and declares
+success if the best fitting polynomial gives r.m.s. fitting
+error ≤ εp (we discuss the setting of this threshold below).
+
+D.
+
+Brute Force
+
+Our brute-force symbolic regression model simply tries
+all possible symbolic expressions within some class, in order of increasing complexity, terminating either when the
+maximum fitting error drops below a threshold p or after
+a maximum runtime tmax has been exceeded. Although
+this module alone could solve all our mysteries in principle, it would in many cases take longer than the age of
+our universe in practice. Our brute force method is thus
+typically most helpful once a mystery has been transformed/broken apart into simpler pieces by the modules
+described below.
+We generate the expressions to try by representing them
+as strings of symbols, trying first all strings of length 1,
+then all of length 2, etc., saving time by only generating
+those strings that are syntactically correct. The symbols used are the independent variables as well a subset of those listed in Table I, each representing a constant or a function. We minimize string length by using reverse Polish notation, so that parentheses become
+unnecessary. For example, x + y can be expressed as
+the string “xy+”, the number −2/3 can be expressed
+as the string p
+“0<<1>>/” and the relativistic momentum
+formula mv/ 1 − v 2 /c2 can be expressed as the string
+“mv*1vv*cc*/-R/”.
+Inspection of Table I reveals that many of the symbols are
+redundant. For example, “1”=“0>” and “x∼” = “0x-”.
+π = 2 arcsin 1, so if we drop the symbol “P”, mysteries involving π can still get solved with “P” replaced by
+“1N1>*” — it just takes longer.
+
+Symbol Meaning Arguments
++
+add
+2
+∗
+multiply 2
+−
+subtract 2
+/
+divide
+2
+>
+increment 1
+<
+decrement 1
+∼
+negate
+1
+0
+0
+0
+1
+1
+0
+R
+sqrt
+1
+E
+exp
+1
+P
+π
+0
+L
+ln
+1
+I
+invert
+1
+C
+cos
+1
+A
+abs
+1
+N
+arcsin
+1
+T
+arctan
+1
+S
+sin
+1
+TABLE I: Functions optionally included in brute force search.
+The following three subsets are tried in turn:
+“+-*/><∼SPLICER”, “+-*/> 0 ∼” and
+“+-*/><∼REPLICANTS0”.
+
+Since there are sn strings of length n using an alphabet
+of s symbols, there can be a significant cost both from
+using too many symbols (increasing s) and from using too
+few symbols (increasing the required n, or even making
+a solution impossible). As a compromise, our brute force
+module tries to solve the mystery using three different
+symbol subsets as explained in the caption of Table I.
+To exploit the fact that many equations or parts thereof
+have multiplicative or additive constants, our brute force
+method comes in two variants that automatically solves
+for such constants, thus allowing the algorithm to focus
+on the symbolic expression and not on numerical constants.
+Although the problem of overfitting is most familiar when
+searching a continuous parameter space, the same phenomenon can occur when searching our discrete space of
+symbol strings. To mitigate this, we follow the prescription in [30] and define the winning function to be the one
+with r.m.s. fitting error  < b that has the smallest total
+description length
+
+
+
+
+DL ≡ log2 N + λ log2 max 1,
+,
+d
+
+(2)
+
+where d = 10−15 and N is the rank of the string on the
+list of all strings tried. The two terms correspond roughly
+to the number of bits required to store the symbol string
+and the prediction errors, respectively, if the hyperparameter λ is set to equal the number of data points Nd .
+1/2
+We use λ = Nd in our experiments below, to prioritize simpler formulas. If the mystery has been generated
+using a neural network (see below), we set the precision
+
+5
+threshold b to ten times the validation error, otherwise
+we set it to 10−5 .
+
+E.
+
+convergence to keep 0NN above some positive floor even
+as Nd → ∞ and  → 0. In practice, we obtained 0NN values between 10−3 frms and 10−5 frms across the range
+of tested equations.
+
+Neural-network-based tests & transformations
+
+Even after applying the dimensional analysis, many mysteries are still too complex to be solved by the polyfit
+or brute force modules in a reasonable amount of time.
+However, if the mystery function f (x1 , ..., xn ) can be
+found to have simplifying properties, it may be possible
+to transform it into one or more simpler mysteries that
+can be more easily solved. To search for such properties,
+we need to be able to evaluate f at points {x1 , ..., xn }
+of our choosing where we typically have no data. For
+example, to test if a function f has translational symmetry, we need to test if f (x1 , x2 ) = f (x1 + a, x2 + a) for
+various constants a, but if a given data point has its two
+variables separated by x2 − x1 = 1.61803, we typically
+have no other examples in our data set with exactly that
+variable separation. To perform our tests, we thus need
+an accurate high-dimensional interpolation between our
+data point.
+
+1.
+
+Neural network training
+
+In order to obtain such an interpolating function for a
+given mystery, we train a neural network to predict the
+output given its input. We train a feed-forward, fully
+connected neural network with 6 hidden layers with softplus activation functions, the first 3 having 128 neurons
+and the last 3 having 64 neurons. For each mystery we
+generated 100,000 data points, using 80% as the training
+set and the remainder as the validation set, training for
+100 epochs with learning rate 0.005 and batch size 2048.
+We use the r.m.s.-error loss function and the Adam optimizer with a weight decay of 10−2 . The learning rate and
+momentum schedules were implemented as described in
+[31, 32] using the FastAI package [33]; with a ration of 20
+between the maximum and minimum learning rates, and
+using 10% of the iterations for the last part of the training cycle. For the momentum, the maximum β1 -value
+was 0.95 and the minimum 0.85, while β2 = 0.99.
+If the neural network were expressive enough to be able
+to perfectly fit the mystery function, and the training
+process would never got stuck in a local minimum, then
+one might naively expect the r.m.s. validation error 0NN
+1/2
+to scale as frms /Nd in the limit of ample data, with a
+constant prefactor depending on the number of function
+arguments and the function’s complexity. Here frms is
+the r.m.s. of the f -values in the dataset, Nd is the number
+of data points and  is the relative r.m.s. noise on the
+independent variable as explored in Section III D. For
+realistic situations, one expects limited expressibility and
+
+2.
+
+Translational symmetry and generalizations
+
+We test for translational symmetry using the neural network as detailed in Algorithm 1. We first check if the
+f (x1 , x2 , x3 , ...) = f (x1 + a, x2 + a, x3 ...) to within a precision sym . If that is the case, then f depends on x1 and
+x2 only through their difference, so we replace these two
+input variables by a single new variable x01 ≡ x2 − x1 .
+Otherwise, we repeat this test for all pairs of input variables, and also test whether any variable pair can be replaced by its sum, product or ratio. The ratio case corresponds to scaling symmetry, where two variables can be
+simultaneously rescaled without changing the answer. If
+any of these simplifying properties is found, the resulting
+transformed mystery (with one fewer input variables) is
+iteratively passed into a fresh instantiation of our full AI
+Feynman symbolic regression algorithm, as illustrated in
+Figure 1. After experimentation, we chose the precision
+threshold sym to be 7 times the neural network validation error, which roughly optimized the training set
+performance. (If the noise were Gaussian, even a cut at
+4 rather than 7 standard deviations would produce negligible false positives.)
+
+3.
+
+Separability
+
+We test for separability using the neural network as exemplified in Algorithm 2. A function is separable if it
+can be split into two parts with no variables in common.
+We test for both additive and multiplicative separability,
+corresponding to these two parts being added and multiplied, respectively (the logarithm of a multiplicatively
+separable function is additively separable).
+For example, to test if a function of 2 variables is multiplicatively separable, i.e., of the form f (x1 , x2 ) =
+g(x1 )h(x2 ) for some univariate functions g and h, we first
+select two constants c1 and c2 ; for numerical robustness,
+we choose ci to be the means of all the values of xi in
+the mystery data set, i = 1, 2. We then compute the
+quantity
+−1
+∆sep (x1 , x2 ) ≡ frms
+f (x1 , x2 ) −
+
+f (x1 , c2 )f (c1 , x2 )
+f (c1 , c2 )
+
+(3)
+
+for each data point. This is a measure of non-separability,
+since it vanishes if f is multiplicatively separable. The
+equation is considered separable if the r.m.s. average ∆sep
+
+6
+over the mystery data set is less than an accuracy threshold sep , which is chosen to be N = 10 times the neural
+network validation error 2 .
+
+Symbol Meaning
+
+Setting
+
+br
+
+Tolerance in brute force module
+
+10−5
+
+pol
+
+Tolerance in polynomial fit module
+
+10−4
+
+If separability is found, we define the two new univariate mysteries y 0 ≡ f (x1 , c2 ) and y 00 ≡ f (c1 , x2 )/f (c1 , c2 ).
+We pass the first one, y 0 , back to a fresh instantiations of
+our full AI Feynman symbolic regression algorithm and
+if it gets solved, we redefine y 00 ≡ y/y 0 cnum , where cnum
+represents any multiplicative numerical constant that appears in y 0 . We then pass y 00 back to our algorithm and
+if it gets solved, the final solutions is y = y 0 y 00 /cnum . We
+test for additive separability analogously, simply replacing ∗ and / by + and − above; also cnum will represent an
+additive numerical constant in this case. If we succeed in
+solving the two parts, then the full solution to the original
+mystery is the sum of the two parts minus the numerical
+constant. When there are more than two variables xi , we
+are testing all the possible subsets of variables that can
+lead to separability, and proceed as above for the newly
+created two mysteries.
+
+0NN
+
+Validation error tolerance for neural
+network use
+
+10−2
+
+sep
+
+Tolerance for separability
+
+10 N N
+
+sym
+
+Tolerance for symmetry
+
+7 N N
+
+sep
+bf
+
+Tolerance in brute force module af- 10 N N
+ter separability
+
+sep
+pol
+
+Tolerance in polynomial fit module 10 N N
+after separability
+
+λ
+
+Importance of accuracy relative to Nd
+complexity
+
+4.
+
+Setting variables equal
+
+We also exploit the neural network to explore the effect
+of setting two input variables equal and attempting to
+solve the corresponding new mystery y 0 with one fewer
+variable. We try this for all variable pairs, and if the resulting new mystery is solved, we try solving the mystery
+y 00 ≡ y/y 0 that has the found solution divided out.
+As an example, this technique solves the Gaussian probability distribution mystery I.6.2. After making θ and
+σ equal, and dividing the initial equation by the result,
+we are getting rid of the denominator and the remaining
+part of the equation is an exponential. After taking the
+logarithm of this (see the below section) the resulting expression can be easily solved by the brute force method.
+
+1/2
+
+TABLE II: Hyperparameters in our algorithm and the setting
+we use in this paper.
+
+inverse, sin, cos, tan, arcsin, arccos, arctan. This reduces the number of symbols needed by the brute force
+by one and in certain cases it even allows the polynomial fit to solve the equation, when the brute force
+would otherwise fail. For example, the formula for the
+distance between 2 points in the 3D Euclidean space:
+p
+(x1 − x2 )2 + (y1 − y2 )2 + (z1 − z2 )2 , once raised to the
+power of 2 becomes just a polynomial which can be easily discovered by the polynomial fit algorithm. The same
+transformations are also applied to the dependent variables, one at a time. In addition multiplication and division by 2 were added as transformations in this case.
+It should be noted that, like most machine-learning methods, the AI Feynman algorithm has some hyperparameters that can be tuned to optimize performance on the
+problems at hand. They were all introduced above, but
+for convenience, they are also summarized in Table II.
+
+III.
+F.
+
+Extra Transformations
+
+In addition, several transformations are applied to the
+dependent and independent variables which proved to
+be useful for solving certain equations. Thus, for each
+equation, we ran the brute force and polynomial fit on
+a modified version of the equation in which the dependent variable was transformed by one of the following
+functions: square root, raise to the power of 2, log, exp,
+
+A.
+
+RESULTS
+
+The Feynman Symbolic Regression Database
+
+To facilitate quantitative testing of our and other symbolic regression algorithms, we created the Feynman
+Symbolic Regression Database (FSReD) and made it
+freely available for download3 . For each regression mystery, the database contains the following:
+1. Data table: A table of numbers, whose rows are
+of the form {x1 , x2 , ..., y}, where y = f (x1 , x2 , ...);
+
+2 We also check whether the function is multiplicatively separable
+
+up to an additive constant: f (x1 , x2 ) = a + g(x1 )h(x2 ), where
+a is a constant. As a backup, we retain the above-mentioned
+simpler test for multiplicative separability, which proved more
+robust when a = 0
+
+3
+
+The 6.5 GB Feynman Database for Symbolic Regression can be
+downloaded here: https://space.mit.edu/home/tegmark/
+aifeynman.html
+
+7
+the challenge is to discover the correct analytic expression for the mystery function f .
+2. Unit table: A table specifying the physical units
+of the input and output variables as 6-dimensional
+vectors of the form seen in Table III.
+3. Equation: The analytic expression for the mystery function f , for answer-checking.
+To test an analytic regression algorithm using the
+database, its task is to predict f for each mystery taking
+the data table (and optionally the unit table) as input.
+Of course, there are typically many symbolically different
+ways of expressing the same function. For example, if the
+mystery function f is (u + v)/(1 + uv/c2 ), then the symbolically different expression (v + u)/(1 + uv/c2 ) should
+count as a correct solution. The rule for evaluating an
+analytic regression method is therefore that a mystery
+function f is deemed correctly solved by a candidate expression f 0 if algebraic simplification of the expression
+f 0 − f (say, with the Simplify function in Mathematica
+or the simplify function in the Python sympy package)
+produces the symbol “0”.
+In order to sample equations from a broad range of
+physics areas, the database is generated using 100 equations from the seminal Feynman Lectures on Physics [34–
+36], a challenging three-volume course covering classical
+mechanics, electromagnetism and quantum mechanics as
+well as a selection of other core physics topics; we prioritized the most complex equations, excluding ones involving derivatives or integrals. The equations are listed
+in tables IV and V, and can be seen to involve between
+1 and 9 independent variables as well as the elementary
+functions +, −, ∗, /, sqrt, exp, log, sin, cos, arcsin and
+tanh. The numbers appearing in these equations are seen
+to be simple rational numbers as well as e and π.
+We also included in the database a set of 20 more challenging “bonus” equations, extracted from other seminal physics books: Classical Mechanics by Herbert Goldstein, Charles P. Poole, John L. Safko [37], Classical electrodynamics by J. Jackson [38], Gravitation and Cosmology: Principles and Applications of the General Theory
+of Relativity by Steven Weinberg [39] and Quantum Field
+Theory and the Standard Model by Matthew D. Schwartz
+[40]. These equations were selected for being both famous
+and complicated.
+The data table provided for each mystery equation contains 105 rows corresponding to randomly generated input variables. These are sampled uniformly between 1
+and 5. For certain equations, the range of sampling was
+slightly adjusted to avoid unphysical result, such as division by zero, or taking the square root of a negative
+number. The range used for each equation is listed in
+the Feynman Symbolic Regression Database.
+
+Variables
+Units
+m s kg T V
+a, g
+Acceleration
+1 -2 0 0 0
+h, ~, L, Jz
+Angular momentum
+2 -1 1 0 0
+A
+Area
+2 0 0 0 0
+kb
+Boltzmann constant
+2 -2 1 -1 0
+C
+Capacitance
+2 -2 1 0 -2
+q, q1 , q2
+Charge
+2 -2 1 0 -1
+j
+Current density
+0 -3 1 0 -1
+I, I0
+Current Intensity
+2 -3 1 0 -1
+ρ, ρ0
+Density
+-3 0 1 0 0
+θ, θ1 , θ2 , σ, n
+Dimensionless
+0 0 0 0 0
+g , kf , γ, χ, β, α Dimensionless
+0 0 0 0 0
+pγ , n0 , δ, f , µ
+Dimensionless
+0 0 0 0 0
+n0 , δ, f , µ, Z1 , Z2 Dimensionless
+0 0 0 0 0
+D
+Diffusion coefficient
+2 -1 0 0 0
+µdrif t
+Drift velocity constant
+0 -1 1 0 0
+pd
+Electric dipole moment
+3 -2 1 0 -1
+Ef
+Electric field
+-1 0 0 0 1
+
+Electric permitivity
+1 -2 1 0 -2
+E, K, U
+Energy
+2 -2 1 0 0
+Eden
+Energy density
+-1 -2 1 0 0
+FE
+Energy flux
+0 -3 1 0 0
+F , Nn
+Force
+1 -2 1 0 0
+ω, ω0
+Frequency
+0 -1 0 0 0
+kG
+Grav. coupling (Gm1 m2 ) 3 -2 1 0 0
+H
+Hubble constant
+0 -1 0 0 0
+Lind
+Inductance
+-2 4 -1 0 2
+nrho
+Inverse volume
+-3 0 0 0 0
+x, x1 , x2 , x3
+Length
+1 0 0 0 0
+y, y1 , y2 , y3
+Length
+1 0 0 0 0
+z, z1 , z2 , r, r1 , r2 Length
+1 0 0 0 0
+λ, d1 , d2 , d, ff , af Length
+1 0 0 0 0
+I1 , I2 , I∗ , I∗0
+Light intensity
+0 -3 1 0 0
+B, Bx , By , Bz
+Magnetic field
+-2 1 0 0 1
+µm
+Magnetic moment
+4 -3 1 0 -1
+M
+Magnetisation
+1 -3 1 0 -1
+m, m0 , m1 , m2
+Mass
+0 0 1 0 0
+µe
+Mobility
+0 1 -1 0 0
+p
+Momentum
+1 -1 1 0 0
+G
+Newton’s constant
+3 -2 -1 0 0
+P∗
+Polarization
+0 -2 1 0 -1
+P
+Power
+2 -3 1 0 0
+pF
+Pressure
+-1 -2 1 0 0
+R
+Resistance
+-2 3 -1 0 2
+µS
+Shear modulus
+-1 -2 1 0 0
+Lrad
+Spectral radiance
+0 -2 1 0 0
+kspring
+Spring constant
+0 -2 1 0 0
+σden
+Surface Charge density
+0 -2 1 0 -1
+T , T1 , T2
+Temperature
+0 0 0 1 0
+κ
+Thermal conductivity
+1 -3 1 -1 0
+t, t1
+Time
+0 1 0 0 0
+τ
+Torque
+2 -2 1 0 0
+Avec
+Vector potential
+-1 1 0 0 1
+u, v, v1 , c, w
+Velocity
+1 -1 0 0 0
+V , V1 , V2
+volume
+3 0 0 0 0
+ρc , ρc0
+Volume charge density
+-1 -2 1 0 -1
+Ve
+Voltage
+0 0 0 0 1
+k
+Wave number
+-1 0 0 0 0
+Y
+Young modulus
+-1 -2 1 0 0
+TABLE III: Unit table used for our automated dimensional
+analysis.
+
+8
+Feynman Equation
+eq.
+√
+2
+I.6.20a
+f = e−θ /2 / 2π
+2
+√
+− θ
+I.6.20
+f = e 2σ2 / 2πσ 2
+(θ−θ1 )2 √
+−
+2σ 2
+/ 2πσ 2
+I.6.20b
+f =p
+e
+I.8.14
+d = (x2 − x1 )2 + (y2 − y1 )2
+Gm1 m2
+I.9.18
+F = (x −x )2 +(y
+2
+2
+2
+1
+2 −y1 ) +(z2 −z1 )
+I.10.7
+m = r m0
+2
+
+Solution Methods
+time (s) used
+16 bf
+
+Data Solved
+Solved Noise
+needed by Eureqa w/o da tolerance
+10
+no
+yes
+10−2
+102
+
+no
+
+yes
+
+10−4
+
+4792 sym–, ev, bf-log
+103
+544 da, pf-squared
+102
+5975 da, sym–, sym–, sep∗, pf-inv 106
+14 da, bf
+10
+
+no
+no
+no
+no
+
+yes
+yes
+yes
+yes
+
+10−4
+10−4
+10−5
+10−4
+
+184 da, pf
+12 da, bf
+17 da, bf
+12 da
+8 da
+19 da, bf
+22 da, bf
+20 da, bf
+12 da
+
+102
+10
+10
+10
+10
+10
+10
+10
+10
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+
+10−3
+10−3
+10−2
+10−2
+10−2
+10−3
+10−4
+10−4
+10−2
+
+2992 ev, bf-log
+
+1− v2
+c
+
+I.11.19
+I.12.1
+I.12.2
+I.12.4
+I.12.5
+I.12.11
+I.13.4
+I.13.12
+I.14.3
+
+A = x1 y1 + x2 y2 + x3 y3
+F = µNn
+q1 q2
+F = 4πr
+2
+q1
+Ef = 4πr
+2
+F = q2 Ef
+F = q(Ef + Bv sin θ)
+K = 12 m(v 2 + u2 + w2 )
+U = Gm1 m2 ( r1 − r1 )
+2
+1
+U = mgz
+
+I.14.4
+I.15.3x
+
+U = spring
+2
+x1 = √ x−ut
+2
+2
+
+9 da
+22 da, bf
+
+10
+10
+
+yes
+no
+
+yes
+no
+
+10−2
+10−3
+
+I.15.3t
+
+t1 = √
+
+20 da, bf
+
+102
+
+no
+
+no
+
+10−4
+
+13 da, bf
+
+10
+
+no
+
+yes
+
+10−4
+
+18 da, bf
+
+10
+
+no
+
+yes
+
+10−3
+
+17 da, bf
+15 da, bf
+17 da, bf
+22 da, bf
+10 da
+530 da, bf-sin
+14 da, bf
+
+10
+10
+10
+10
+10
+102
+10
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+
+10−2
+10−3
+10−3
+10−4
+10−2
+10−2
+10−2
+
+10
+
+yes
+
+yes
+
+10−2
+
+2135 da, sym–, bf-squared
+
+103
+
+no
+
+no
+
+10−4
+
+118 da, bf
+
+102
+
+yes
+
+yes
+
+10−3
+
+529 da, bf-sin
+
+102
+
+yes
+
+yes
+
+10−3
+
+13 da
+698 da, bf-sqrt
+13 da
+13 da, bf
+
+10
+10
+10
+10
+
+yes
+no
+yes
+no
+
+yes
+yes
+yes
+yes
+
+10−2
+10−4
+10−2
+10−3
+
+14 da, bf
+
+10
+
+no
+
+yes
+
+10−3
+
+8 da
+7032 da, bf
+13 da
+8 da
+13 da, bf
+
+10
+102
+10
+10
+10
+
+yes
+yes
+yes
+yes
+yes
+
+yes
+no
+yes
+yes
+yes
+
+10−2
+10−3
+10−2
+10−2
+10−3
+
+16 da, bf
+
+10
+
+yes
+
+yes
+
+10−4
+
+20 da, bf
+22 da, bf
+
+10
+10
+
+no
+no
+
+yes
+no
+
+10−2
+10−5
+
+14 da
+11 da
+16 da, bf
+
+10
+10
+10
+
+yes
+yes
+yes
+
+yes
+yes
+yes
+
+10−2
+10−2
+10−3
+
+18 da, bf
+
+10
+
+yes
+
+yes
+
+10−3
+
+14 da, bf
+
+10
+
+yes
+
+yes
+
+10−2
+
+108 da, bf
+
+102
+
+no
+
+no
+
+10−5
+
+29 da bf
+
+10
+
+yes
+
+yes
+
+10−2
+
+I.15.10
+I.16.6
+I.18.4
+I.18.12
+I.18.16
+I.24.6
+I.25.13
+I.26.2
+I.27.6
+
+x2
+
+k
+
+1−u /c
+t−ux/c2
+
+1−u2 /c2
+p = √ m02v 2
+1−v /c
+u+v
+v1 = 1+uv/c
+2
+2 r2
+r = m1mr1 +m
++m
+1
+2
+
+τ = rF sin θ
+L = mrv sin θ
+E = 14 m(ω 2 + ω02 )x2
+q
+Ve = C
+θ1 = arcsin(n sin θ2 )
+ff = 1 1 n
+d1
+
+I.29.4
+I.29.16
+I.30.3
+I.30.5
+I.32.5
+I.32.17
+I.34.8
+I.34.10
+I.34.14
+
+ω
+k=q
+c
+
+x=
+
++d
+
+2
+
+8 da
+
+x21 + x22 − 2x1 x2 cos(θ1 − θ2 )
+
+sin2 (nθ/2)
+I∗ = I∗0 sin2 (θ/2)
+λ
+θ = arcsin( nd
+)
+q 2 a2
+P = 6πc3
+P = ( 12 cEf2 )(8πr2 /3)(ω 4 /(ω 2 − ω02 )2 )
+ω = qvB
+p
+ω0
+ω = 1−v/c
+1+v/c
+ω= √
+ω0
+1−v 2 /c2
+
+I.34.27
+I.37.4
+I.38.12
+I.39.10
+I.39.11
+
+E = ~ω
+√
+I∗ = I1 + I2 + 2 I1 I2 cos δ
+2
+r = 4π~
+mq 2
+E = 32 pF V
+1
+E = γ−1
+pF V
+
+I.39.22
+
+PF = nkVb T
+
+I.40.1
+I.41.16
+I.43.16
+I.43.31
+I.43.43
+I.44.4
+I.47.23
+I.48.20
+I.50.26
+
+n = n0 e
+Lrad =
+
+− mgx
+k T
+b
+
+~ω 3
+~ω
+
+π 2 c2 (e kb T −1)
+µ
+qV
+v = drifdt e
+D = µe kb T
+1 kb v
+κ = γ−1
+A
+2
+E = nkb T ln( V
+)
+V1
+q
+γpr
+c=
+ρ
+2
+E = √ mc2 2
+1−v /c
+
+x = x1 [cos(ωt) + α cos(ωt)2 ]
+
+TABLE IV: Tested Feynman Equations, part 1. Abbreviations in the “Methods used” column: “da” = dimensional analysis,
+“bf” = brute force, “pf” = polyfit, “ev” = set 2 variables equal, “sym” = symmetry, “sep” = separability. Suffixes denote the type
+of symmetry or separability (“sym−” =translationa symmetry, ”sep*”=multiplicative separability, etc.) or the preprocessing
+before brute force (e.g., “bf-inverse” means inverting the mystery function before bf).
+
+9
+Feynman Equation
+eq.
+1 )A
+II.2.42
+P = κ(T2 −T
+d
+P
+II.3.24
+FE = 4πr2
+q
+II.4.23
+Ve = 4πr
+1 pd cos θ
+II.6.11
+Ve = 4π r2p
+3 pd z
+II.6.15a Ef = 4π
+x2 + y 2
+r5
+3 pd
+cos
+θ sin θ
+II.6.15b Ef = 4π
+3
+r
+q2
+II.8.7
+E = 35 4πd
+
+Solution Methods
+time (s) used
+54 da, bf
+8 da
+10 da
+18 da, bf
+2801 da, sm, bf
+23 da, bf
+10 da
+
+II.8.31
+II.10.9
+
+Eden = 2f
+1
+Ef = σden
+ 1+χ
+
+8 da
+13 da, bf
+
+10 yes
+10 yes
+
+yes
+yes
+
+10−2
+10−2
+
+II.11.3
+
+f
+x = m(ω2 −ω
+2)
+
+25 da, bf
+
+10 yes
+
+yes
+
+10−3
+
+28 da, bf
+
+10 yes
+
+yes
+
+10−2
+
+10 yes
+102 no
+102 no
+10 yes
+102 no
+
+yes
+yes
+yes
+yes
+yes
+
+10−3
+10−3
+10−4
+10−2
+10−4
+
+14 da, bf
+
+10 no
+
+yes
+
+10−4
+
+14 da, bf
+14 da, bf
+21 da, bf
+
+10 yes
+10 yes
+10 yes
+
+yes
+yes
+yes
+
+10−3
+10−3
+10−3
+
+10 no
+10 yes
+10 yes
+10 yes
+10 yes
+10 yes
+10 yes
+10 yes
+10 no
+10 yes
+10 yes
+10 yes
+10 yes
+10 yes
+10 no
+
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+yes
+no
+yes
+yes
+yes
+yes
+yes
+
+10−5
+10−2
+10−2
+10−2
+10−2
+10−4
+10−2
+10−4
+10−2
+10−4
+10−2
+10−3
+10−3
+10−3
+10−3
+
+10 no
+
+yes
+
+10−3
+
+10 yes
+10 no
+103 no
+102 yes
+10 yes
+10 yes
+
+yes
+yes
+yes
+yes
+yes
+yes
+
+10−2
+10−3
+10−3
+10−4
+10−3
+10−4
+
+18 da, bf
+14 da, bf
+10 da
+14 da, bf
+27 bf
+18 da, bf
+
+10 no
+10 yes
+10 yes
+10 yes
+10 yes
+10 yes
+
+yes
+yes
+yes
+yes
+yes
+yes
+
+10−3
+10−4
+10−2
+10−3
+10−3
+10−5
+
+13 da
+
+10 yes
+
+yes
+
+10−2
+
+E 2
+
+qE
+
+Data Solved
+Solved Noise
+needed by Eureqa w/o DA tolerance
+10 yes
+yes
+10−3
+10 yes
+yes
+10−2
+10 yes
+yes
+10−2
+10 yes
+yes
+10−3
+4
+10 no
+yes
+10−3
+10 yes
+yes
+10−2
+10 yes
+yes
+10−2
+
+0
+
+II.11.17
+II.11.20
+II.11.27
+II.11.28
+II.13.17
+II.13.23
+II.13.34
+
+p E cos θ
+n = n0 (1 + d kfb T )
+n p2 E
+P∗ = ρ3kdb T f
+nα
+Ef
+P∗ = 1−nα/3
+nα
+θ = 1 + 1−(nα/3)
+2I
+1
+B = 4πc
+2
+ρ r
+c0
+
+ρc = √
+j= √
+
+1−v 2 /c2
+ρc0 v
+
+1−v 2 /c2
+
+E = −µM B cos θ
+E = −pd Ef cos θ
+q
+Ve = 4πr(1−v/c)
+q
+2
+2
+II.24.17 k = ωc2 − πd2
+II.27.16 FE = cEf2
+II.27.18 Eden = Ef2
+qv
+II.34.2a I = 2πr
+II.34.2
+µM = qvr
+2
+qB
+II.34.11 ω = g2m
+qh
+II.34.29a µM = 4πm
+II.34.29b E = g µM~ BJz
+n0
+II.35.18 n = exp(µm B/(kb T ))+exp(−µ
+m B/(kb T ))
+µM B
+II.35.21 M = nρ µM tanh( kb T )
+B
+II.36.38 f = µkm
++ µcm2 kαM
+bT
+bT
+II.37.1
+E = µM (1 + χ)B
+II.38.3
+F = Y dAx
+Y
+II.38.14 µS = 2(1+σ)
+1
+III.4.32 n = ~ω
+II.15.4
+II.15.5
+II.21.32
+
+III.4.33
+
+E=
+
+e kb T −1
+~ω
+~ω
+
+e kb T −1
+B
+ω = 2µM
+~
+pγ = sin( Et
+)2
+~
+pd Ef t sin((ω−ω0 )t/2)2
+pγ = ~
+p ((ω−ω0 )t/2)2
+E = µM Bx2 + By2 + Bz2
+
+III.7.38
+III.8.54
+III.9.52
+III.10.19
+III.12.43 L = n~
+2
+k
+III.13.18 v = 2Ed
+~
+
+18 da, bf
+337 da bf-inverse
+1708 da, sym*, bf
+13 da
+13 da, bf
+
+62 da bf
+13 da
+9 da
+11 da
+11 da
+16 da, bf
+12 da
+18 da, bf
+30 da, bf
+1597 da, halve-input, bf
+77 da bf
+15 da, bf
+47 da, bf
+13 da, bf
+20 da, bf
+19 da, bf
+13 da
+39 da, bf
+3162 da, sym–, sm, bf
+410 da, bf-squared
+11 da, bf
+16 da, bf
+
+qVe
+
+III.14.14
+III.15.12
+III.15.14
+III.15.27
+III.17.37
+III.19.51
+
+I = I0 (e kb T − 1)
+E = 2U (1 − cos(kd))
+~2
+m = 2Ed
+2
+2πα
+k = nd
+f = β(1 + α cos θ)
+−mq 4
+1
+E = 2(4π)
+2 ~2 n2
+
+III.21.20 j =
+
+−ρc0 qAvec
+m
+
+TABLE V: Tested Feynman Equations, part 2 (same notation as in Table IV)
+
+10
+Source
+
+Equation
+
+Solved Solved by Methods used
+Eureqa
+
+Rutherford Scattering
+
+
+
+A=
+
+Z1 Z2 α~c
+)
+4E sin2 ( θ
+2
+
+r
+Friedman Equation
+
+H=
+
+2
+c2
+
+k
+8πG
+ρ − af2
+3
+
+yes
+
+no
+
+da, bf-sqrt
+
+yes
+
+no
+
+da, bf-squared
+
+yes
+
+no
+
+da, bf
+
+no
+
+no
+
+-
+
+yes
+
+no
+
+da, bf-cos
+
+yes
+
+no
+
+da, sm, bf
+
+yes
+
+no
+
+da, bf-squared
+
+yes
+
+no
+
+da, sym-, bf
+
+f
+
+Compton Scattering
+
+U = 1+ E E
+(1−cos θ)
+mc2
+4 (m
+
+(m1 +m2 )
+r5
+
+cos θ2 − v
+c
+θ1 = arccos 1− v cos
+θ
+2
+c
+i2
+h
+sin(N δ/2)
+I = I0 sin(α/2)
+α/2
+sin(δ/2)
+
+G
+Radiated gravitational wave power P = − 32
+5 c5
+
+Relativistic aberration
+N-slit diffraction
+
+2
+
+1 m2 )
+
+
+
+q
+
+2
+L2
+(E − U − 2mr
+2)
+m
+
+Goldstein 3.16
+
+v=
+
+Goldstein 3.55
+
+G
+k = mk
+(1 +
+L2
+
+q
+
+2
+1 + 2EL
+2 cos(θ1 − θ2 ))
+mkG
+
+2
+
+Goldstein 3.64 (ellipse)
+
+)
+r = 1+αd(1−α
+cos(θ1 −θ2 )
+
+yes
+
+no
+
+da, sym-, bf
+
+Goldstein 3.74 (Kepler)
+
+3/2
+t = √ 2πd
+G(m1 +m2 )
+
+yes
+
+no
+
+da, bf
+
+yes
+
+no
+
+da, sym*, bf
+
+yes
+
+no
+
+da, sep+, bf-squared
+
+yes
+
+yes
+
+da, bf
+
+no
+
+no
+
+-
+
+yes
+
+no
+
+da, bf-inv
+
+yes
+
+no
+
+da, sep∗, bf
+
+yes
+
+no
+
+da, cos-input, bf
+
+yes
+
+yes
+
+da, bf
+
+yes
+
+yes
+
+da, bf
+
+yes
+
+no
+
+da, sym/, sep*, sin-input, bf
+
+Goldstein 8.56
+
+q
+22 EL2
+α = 1 + m(Z
+2 2
+1 Z2 q )
+p
+2
+E = (p − qAvec ) c2 + m2 c4 + qVe
+
+Goldstein 12.80
+
+1
+E = 2m
+[p2 + m2 ω 2 x2 (1 + α xy )]
+
+Jackson 2.11
+
+q
+F = 4πy
+2
+
+Jackson 3.45
+
+Ve =
+
+Goldstein 3.99
+
+Jackson 4.60
+
+h
+
+3
+4πVe d − (y2qdy
+−d2 )2
+
+i
+
+q
+1
+
+(r 2 +d2 −2dr cos α) 2
+
+Ve = Ef cos θ
+
+
+
+3
+
+α−1 d
+−r
+α+2 r 2
+
+
+
+r
+
+Jackson 11.38 (Doppler)
+
+2
+1− v2
+c
+1+ v
+cos
+θ
+c
+c2 kf
+3
+8πG
+a2
+f
+
+ω0 =
+
+ω
+
+
+
+Weinberg 15.2.1
+
+ρ=
+
+1
+pf = − 8πG
+
+Weinberg 15.2.2
+Schwarz 13.132 (Klein-Nishina)
+
+2 2
+
+
+
++H
+
+c4 kf
+a2
+f
+
+~
+A = πα
+( ωω0 )2
+m2 c2
+
+h
+
+2
+
+
+
++ c2 H 2 (1 − 2α)
+
+
+
+ω0
++ ωω0 − sin2 θ
+ω
+
+i
+
+TABLE VI: Tested bonus equations. Goldstein 8.56 is for the special case where the vectors p and A are parallel.
+
+B.
+
+Method comparison
+
+We reviewed the symbolic regression literature for publicly available software against which our method could
+be compared. To the best of our knowledge, the best
+competitor by far is the commercial Eureqa software sold
+by Nutonian, Inc.4 , implementing an improved version of
+the generic search algorithm outlined in [27].
+We compared the AI Feynman and Eureqa algorithms by
+applying them both to the Feynman Database for Symbolic Regression, allowing a maximum of 2 hours of CPU
+time per mystery 5 . Tables IV and V show that Eureqa
+
+4 Eureqa
+
+can be purchased at https://www.nutonian.com/
+products/eureqa.
+5 The AI Feynman algorithm was run using the hyperparameter
+
+solved 71% of the 100 basic mysteries, while AI Feynman
+solved 100%. Closer inspection of these tables reveal that
+the greatest improvement of our algorithm over Eureqa
+
+settings in Table II. For Eureqa, each mystery was run on 4 CPUs.
+The symbols used in trying to solve the equations were: +, −, ∗,
+/, constant, integer constant, input variable, sqrt, exp, log, sin,
+cos. To help Eureqa gain speed, we included the additional functions arcsin and arccos only for those mysteries requiring them,
+and we used only 300 data points (since it does not use a neural network, adding additional data does not help significantly).
+The time taken to solve an equation using our algorithm, as presented in Tables IV and V, corresponds to the time needed for
+an equation to be solved using a set of symbols that can actually
+solve it (see Table I). Equations 1.15.3t and 1.48.2 were solved
+using the second set of symbols, so the overall time needed for
+these two equations is one hour larger than the one listed in the
+tables. Equations I.15.3x and II.35.21 were solved using the 3rd
+set of symbols, so the overall time taken is two hours larger than
+the one listed here.
+
+11
+is for the most complicated mysteries, where our neural network enables eliminating variables by discovering
+symmetries and separability.
+The neural network becomes even more important when
+we rerun AI Feynman without the dimensional analysis
+module: it now solves 93% of the mysteries, and makes
+very heavy use of the neural network to discover separability and translational symmetries. Without dimensional analysis, many of the mysteries retain variables
+that appear only raised to some power or in a multiplicative prefactor, and AI Feynman tends to recursively
+discover them and factor them out one by one. For example, the neural network strategy is used six times when
+solving
+F =
+
+Gm1 m2
+2
+(x2 − x1 ) + (y2 − y1 )2 + (z2 − z1 )2
+
+without dimensional analysis: three times to discover
+translational symmetry that replaces x2 − x1 , y2 − y1
+and z2 − z1 by new variables, once to group together G
+and m1 into a new variable a, once to group together
+a and m2 into a new variable b, and one last time to
+discover separability and factor out b. This shows that
+although dimensional analysis often provides significant
+time savings, it is usually not necessary for successfully
+solving the problem.
+Inspection of how AI Feynman and Eureqa make progress
+over time reveals interesting differences. The progress
+of AI Feynman over time corresponds to repeatedly reducing the number of independent variables, and every
+time this occurs, it is virtually guaranteed to be a step
+in the right direction. In contrast, genetic algorithms
+such as Eureqa make progress over time by finding successively better approximations, but there is no guarantee that more accurate symbolic expressions are closer
+to the truth when viewed as strings of symbols. Specifically, by virtue of being a genetic algorithm, Eureqa has
+the advantage of not searching the space of symbolic expressions blindly like our brute force module, but rather
+with the possibility of a net drift toward more accurate
+(“fit”) equations. The flip side of this is that if Eureqa
+finds a fairly accurate yet incorrect formula with a quite
+different functional form, it risks getting stuck near that
+local optimum. This reflects a fundamental challenge for
+genetic approaches symbolic regression: if the final formula is composed of separate parts that are not summed
+but combined in some more complicated way (as a ratio,
+say), then each of the parts may be useless fits on their
+own and unable to evolutionarily compete.
+
+C.
+
+Dependence on data size
+
+To investigate the effect of changing the size of the data
+set, we repeatedly reduced the size of each data set by
+
+a factor of 10 until our AI Feynman algorithm failed to
+solve it. As seen in Tables IV and V, most equations are
+discovered by the polynomial fit and brute force methods
+using only 10 data points. 100 data points are needed in
+some cases, because the algorithm may otherwise overfit when the true equation is complex, “discovering” an
+incorrect equation that is too simple.
+As expected, equations that require the use of a neural
+network to be solved need significantly more data points
+(between 102 and 106 ) for the network to be able to learn
+the mystery function accurately enough (i.e. obtaining
+r.m.s. accuracy better than 10−3 ). Note that expressions
+requiring the neural network are typically more complex,
+so one might intuitively expect them to require larger
+data sets for the correct equation to be discovered without overfitting, even when using alternate approaches
+such as genetic algorithms.
+
+D.
+
+Dependence on noise level
+
+Since real data is almost always afflicted with measurement errors or other forms of noise, we investigated
+the robustness of our algorithm. For each mystery, we
+added independent Gaussian random noise to its dependent variable y, of standard deviation  yrms , where yrms
+denotes the r.m.s. y-value for the mystery before noise
+has been added. We initially set the relative noise level
+ = 10−6 , then repeatedly multiplied  by 10 until the AI
+Feynman algorithm could no longer solve the mystery.
+As seen in Tables IV and V, most of the equations can
+still be recovered exactly with an -value of 10−4 or less,
+while almost half of them are still solved for  = 10−2 .
+For these noise experiments, we adjusted the threshold
+for the brute force and polynomial fit algorithms when
+the noise level changed, such that not finding a solution
+at all was preferred over finding an approximate solution.
+These thresholds were not optimized for each mystery
+individually, so a better choice of these thresholds might
+allow the exact equation to be recovered with an even
+higher noise level for certain equations. In future work, it
+will be also be interesting to quantify performance of the
+algorithm on data with noise added to the independent
+variables, as well as directly on real-world data.
+
+E.
+
+Bonus mysteries
+
+The 100 basic mysteries discussed above should be viewed
+as a training set for our AI Feynman algorithm, since we
+made improvements to its implementation and hyperparameters to optimize performance. In contrast, we
+can view the 20 bonus mysteries as a test set, since we
+deliberately selected and analyzed them only after the
+AI Feynman algorithm and its hyper-parameter settings
+
+12
+(Table II) had been finalized. The bonus mysteries are
+interesting also by virtue of being significantly more complex and difficult, in order to better identify the limitations our our method.
+Table VI sbows that Eureqa solved only 15% of the
+bonus mysteries, while AI Feynman solved 90%. The
+fact that the success percentage differs more between the
+two methods for the bonus mysteries than for the basic mysteries reflects the increased equation complexity,
+which requires our neural network based strategies for a
+larger fraction of the cases.
+To shed light on the limitations of the AI Feynman algorithm, it is interesting to consider the two mysteries for
+which it failed. The radiated gravitational wave power
+2
+by dimystery was reduced to the form y = − 32a 5b(1+a)
+5
+mensional analysis, corresponding to the string “aaa >
+∗ ∗ bbbbb ∗ ∗ ∗ ∗/” in reverse Polish notation (ignoring the
+multiplicative prefactor − 32
+5 ). This would require about
+2 years for the brute force method, exceeding our allotted
+time limit. The Jackson 2.11 mystery was reduced to the
+1
+a
+form a − 4π
+b(1−a2 )2 by dimensional analysis, corresponding to the string “aP 0 >>>> ∗\abaa∗ < aa∗ < ∗ ∗/∗ −”
+in reverse Polish notation, which would require about 100
+times the age of our universe for the brute force method.
+It is likely that both of these mysteries can be solved with
+relatively minor improvements of the our algorithm. The
+first mystery would have been solved had the algorithm
+not failed to discover that a2 (1 + a)/b5 is separable. The
+large dynamic range induced by the fifth power in the
+denominator caused the neural network to miss the separability tolerance threshold; potential solutions include
+temporarily limiting the parameter range or analyzing
+the logarithm of the absolute value (to discover additive
+separability).
+If we had used different units in the second mystery,
+where 1/4π was replaced by the Coulomb constant k, the
+costly 4π-factor (requiring 7 symbols “P P P P + ++” or
+“P 0 >>>> ∗”) would have disappeared. Moreover, if we
+had used a different set of function symbols that included
+“Q” for squaring, then brute force could quickly have disa
+covered that a − b(1−a
+2 )2 is solved by “aabaQ < Q ∗ /−”.
+Similarly, introducing a symbol ∧ denoting exponentiation, enabling the string for ab to be shortened from
+“aLb ∗ E” to “ab ∧ ”, would enable brute force to solve
+many mysteries faster, including Jackson 2.11.
+Finally, a powerful strategy that could ameliorate both
+of these failures would be to add symbols corresponding
+to parameters that are numerically optimized over. This
+strategy is currently implemented in Eureqa but not AI
+Feynman, and could make a useful upgrade as long as
+it is done in a way that does not unduly slow down the
+symbolic brute force search. In summary, the two failures
+of the AI Feynman algorithm signal not unsurmountable
+obstacles, but motivation for further work.
+In addition, we tested the performance of our algorithm
+
+on the mystery functions presented in [41]6 . Some equations appear twice; we included them only once. Our algorithm again outperformed Eureqa, discovering 66.7%
+of the equations while Eureqa discovered 48.9%. The
+fact that the AI Feynman algorithm performs less well
+on this test set than on genuine physics formulas traces
+back to the fact that most of the equations presented
+in [41] are rather arbitrary compositions of elementary
+functions unlikely to occur in real-world problems, thus
+lacking the symmetries, separability, etc. that the neural
+network part of our algorithm is able to exploit.
+
+IV.
+
+CONCLUSIONS
+
+We have presented a novel physics-inspired algorithm for
+solving multidimensional analytic regression problems:
+finding a symbolic expression that matches data from an
+unknown algebraic function. Our key innovation lies in
+combining traditional fitting techniques with a neuralnetwork-based approach that can repeatedly reduce a
+problem to simpler ones, eliminating dependent variables
+by discovering properties such as symmetries and separability in the unknown function.
+To facilitate quantitative benchmarking of our and other
+symbolic regression algorithms, we created a freely downloadable database with 100 regression mysteries drawn
+from the Feynman Lectures on Physics and a bonus set
+of an additional 20 mysteries selected for difficulty and
+fame.
+
+A.
+
+Key findings
+
+The pre-existing state-of-the-art symbolic regression software Eureqa [26] discovered 68% of the Feynman equations and 15% of the bonus equations, while our AI Feynman algorithm discovered 100% and 90%, respectively,
+including Kepler’s ellipse equation mentioned in the introduction (3rd entry in Table VI). Most of the 100 Feynman equations could be solved even if the data size was
+reduced to merely 102 data points or had percent-level
+noise added, but the most complex equations needing
+neural network fitting required more data and less noise.
+Compared with the genetic algorithm of Eureqa, the most
+interesting improvements are seen for the most difficult
+mysteries where the neural network strategy is repeatedly deployed. Here the progress of AI Feynman over
+time corresponds to repeatedly reducing the problem to
+simpler ones with fewer variables, while Eureqa and other
+
+6 We want to thank the anonymous reviewer who brought this data
+
+set to our attention.
+
+13
+genetic algorithms are forced to solve the full problem by
+exploring a vast search space, risking getting stuck in
+local optima.
+
+B.
+
+Opportunities for further work
+
+Both the successes and failures of our algorithm motivate
+further work to make it better, and we will now briefly
+comment on promising improvement strategies.
+Although we mostly used the same elementary function options (Table I) and hyperparameter settings (Table II) for all mysteries, these could be strategically chosen based on an automated pre-analysis of each mystery.
+For example, observed oscillatory behaviour could suggest including sin and cos and lack thereof could suggest
+saving time by excluding them.
+Our code could also be straightforwardly integrated into
+a larger program discovering equations involving derivatives and integrals, which frequently occur in physics
+equations. For example, if we suspect that our formula
+contains a partial differential equation, then the user can
+simply estimate various derivatives from the data (or its
+interpolation, using a neural network) and include them
+in the AI Feynman algorithm as independent variables,
+thus discovering the differential equation in question.
+We saw how, even if the mystery data has very low noise,
+significant de facto noise was introduced by imperfect
+neural network fitting, complicating subsequent solution
+steps. It will therefore be valuable to explore better neural network architectures, ideally reducing fitting noise
+to the 10−6 level. This may be easier than in many other
+contexts, since we do not care if the neural network generalizes poorly outside the domain where we have data:
+as long as it is highly accurate within this domain, it
+serves our purpose of correctly factoring separable functions, etc..
+Our brute-force method can be better integrated with a
+neural network search for hidden simplicity. Our implemented symmetry search simply tests if two input variables a and b can be replaced by a bivariate function of
+them, specifically +, −, ∗ or /, corresponding to length-3
+strings “ab+”, “ab−”, “ab∗” and “ab/” in Reverse Polish Notation. This can be readily generalized to longer
+strings involving 2 or more variables, for example bivariate functions ab2 or ea cos b.
+A second example of improved brute-force use is if the
+neural network reveals that the function can be exactly
+solved after setting some variable a equal to something
+else (say zero, one or another variable). A brute force
+search can now be performed in the vicinity of the discovered exact expression: for example, if the expression
+is valid for a = 0, the brute force search can insert additive terms that vanish for a = 0 and multiplicative terms
+
+that equal unity for a = 0, thus being likely to discover
+the full formula much faster than an unrestricted brute
+force search from scratch.
+Last but not least, it is likely that marrying the best features from both our method and genetic algorithms can
+spawn a method that outperforms both. Genetic algorithms such as Eureqa perform quite well even in presense
+of significant noise, whether they output not merely one
+hopefully correct formula, but rather a Pareto frontier, a
+sequence of increasingly complex formulas that provide
+progressively better accuracy. Although it may not be
+clear which of these formulas is correct, it is more likely
+that the correct formula is one of them than any particular one that an algorithm might guess. When our neural
+network identifies separability, a so generate Pareto frontier could thus be used to generate candidate formulas
+for one factor, after which each one could be substituted
+back and tested as above, and the best solution to the
+full expression would be retained. Our brute force algorith can similarly be upgraded to return a Pareto frontier
+instead of a single formula.
+In summary, symbolic regression algorithms are getting
+better, and are likely to continue improving. We look
+forward to the day when, for the first time in the history
+of physics, a computer, just like Kepler, discovers a useful
+and hitherto unknown physics formula through symbolic
+regression!
+
+Acknowledgements: We thank Rustin Domingos,
+Zhiyu Dong, Michael Skuhersky, Andrew Tan and Tailin
+Wu for helpful comments, and the Center for Brains,
+Minds, and Machines (CBMM) for hospitality. Funding: This work was supported by The Casey and
+Family Foundation, the Ethics and Governance of AI
+Fund, the Foundational Questions Institute, the Rothberg Family Fund for Cognitive Science and the Templeton World Charity Foundation, Inc. The opinions
+expressed in this publication are those of the authors
+and do not necessarily reflect the views of the Templeton World Charity Foundation, Inc. Author contributions: Concept, supervision, project management:
+M.T. Design of methodology, programming, experimental experimental validation, data curation, data analysis,
+validation, manuscript writing: S.U. and M.T. Competing interests: The authors declare that they have
+no competing interests. Data and materials availability: All data needed to evaluate the conclusions
+in the paper are present in the paper, at https://
+space.mit.edu/home/tegmark/aifeynman.html
+and at https://github.com/SJ001/AI-Feynman.
+Any additional datasets, analysis details, and material
+recipes are available upon request.
+
+14
+Algorithm 1 AI Feynman: Translational
+Symmetry
+Require Dataset D = {(x, y)}
+Require net: trained neural network
+Require NNerror : the neural network validation error
+a=1
+for i in len(x) do:
+for j in len(x) do:
+if i < j:
+xt = x
+xt [i] = xt [i] + a
+xt [j] = xt [j] + a
+error = RMSE(net(x),net(xt ))
+error = error/RMSE(net(x))
+if error < 7 × NNerror :
+xt [i] = xt [i] − xt [j]
+xt = delete(xt ,j)
+return xt , i, j
+
+Algorithm 2 AI Feynman: Additive Separability
+Require Dataset D = {(x, y)}
+Require net: trained neural network
+Require NNerror : the neural network validation error
+xeq = x
+for i in len(x) do:
+xeq [i] = mean(x[i])
+for i in len(x) do:
+c = combinations([1,2,...,len(x)],i)
+for idx1 in c do:
+x1 = x
+x2 = x
+idx2 = k in [1,len(x)] not in idx1
+for j in idx1 :
+x1 [j] = mean(x[j])
+for j in idx2 :
+x2 [j] = mean(x[j])
+error = RMSE(net(x),net(x1 )+net(x2 )-net(xeq ))
+error = error/RMSE(net(x))
+if error < 10 × NNerror :
+x1 = delete(x1 ,index2 )
+x2 = delete(x2 ,index1 )
+return x1 , x2 , index1 , index2
+
+[1] A. Koyré, The Astronomical Revolution: CopernicusKepler-Borelli (Routledge, 2013).
+[2] N. M. Amil, N. Bredeche, C. Gagné, S. Gelly, M. Schoenauer, and O. Teytaud, in European Conference on Genetic Programming (Springer, 2009), pp. 327–338.
+[3] S. K. Pal and P. P. Wang, Genetic algorithms for pattern
+recognition (CRC press, 2017).
+[4] J. D. Lohn, W. F. Kraus, and D. S. Linden, IEEEAntenna & Propagation Society Mtg. 3, 814 (2002).
+[5] D. S. Linden, in Proceedings 2002 NASA/DoD Conference on Evolvable Hardware (IEEE, 2002), pp. 147–151.
+[6] H. Yu and N. Yu, The Pennsylvania State University,
+University park pp. 1–9 (2003).
+[7] S. Panthong and S. Jantarang, in CCECE 2003Canadian Conference on Electrical and Computer Engi-
+
+neering. Toward a Caring and Humane Technology (Cat.
+No. 03CH37436) (IEEE, 2003), vol. 3, pp. 1597–1600.
+[8] B. Oh, Y. Na, J. Yang, S. Park, J. Nang, and J. Kim,
+Advances in Electrical and Computer Engineering 10, 81
+(2010).
+[9] A. Ram, G. Boone, R. Arkin, and M. Pearce, Adaptive
+behavior 2, 277 (1994).
+[10] B. Delman, Master’s thesis, Rochester Institute of Technology (2004).
+[11] P. Y. Lu, S. Kim, and M. Soljacic (????).
+[12] R. J. Bauer Jr, R. J. Bauer, et al., Genetic algorithms
+and investment strategies, vol. 19 (John Wiley & Sons,
+1994).
+[13] R. Venkatesan and V. Kumar, International Journal of
+Forecasting 18, 625 (2002).
+
+15
+[14] W. L. Cava, T. R. Singh, J. Taggart, S. Suri, and
+J. Moore, in International Conference on Learning Representations (2019), URL https://openreview.net/
+forum?id=Hke-JhA9Y7.
+[15] S. McAleer, F. Agostinelli, A. Shmakov, and P. Baldi,
+in International Conference on Learning Representations
+(2019), URL https://openreview.net/forum?id=
+Hyfn2jCcKm.
+[16] J. R. Koza and J. R. Koza, Genetic programming: on the
+programming of computers by means of natural selection,
+vol. 1 (MIT press, 1992).
+[17] M. D. Schmidt, R. R. Vallabhajosyula, J. W. Jenkins,
+J. E. Hood, A. S. Soni, J. P. Wikswo, and H. Lipson,
+Physical biology 8, 055011 (2011).
+[18] R. K. McRee, in Proceedings of the 12th Annual Conference Companion on Genetic and Evolutionary Computation (ACM, New York, NY, USA, 2010), GECCO ’10,
+pp. 1983–1990, ISBN 978-1-4503-0073-5, URL http:
+//doi.acm.org/10.1145/1830761.1830841.
+[19] S. Stijven, W. Minnebo, and K. Vladislavleva, in Proceedings of the 13th Annual Conference Companion on Genetic and Evolutionary Computation (ACM, New York,
+NY, USA, 2011), GECCO ’11, pp. 623–630, ISBN 978-14503-0690-4, URL http://doi.acm.org/10.1145/
+2001858.2002059.
+[20] W. Kong, C. Liaw, A. Mehta, and D. Sivakumar, in
+International Conference on Learning Representations
+(2019), URL https://openreview.net/forum?id=
+rkluJ2R9KQ.
+[21] T. McConaghy, in Genetic Programming Theory and
+Practice IX (Springer, 2011), pp. 235–260.
+[22] I. Arnaldo, U.-M. O’Reilly, and K. Veeramachaneni, in
+Proceedings of the 2015 Annual Conference on Genetic
+and Evolutionary Computation (ACM, 2015), pp. 983–
+990.
+[23] S. L. Brunton, J. L. Proctor, and J. N. Kutz, Proceedings
+of the National Academy of Sciences 113, 3932 (2016).
+[24] M. Quade, M. Abel, J. Nathan Kutz, and S. L. Brunton,
+Chaos: An Interdisciplinary Journal of Nonlinear Science
+28, 063116 (2018).
+[25] D. P. Searson, D. E. Leahy, and M. J. Willis, in Proceedings of the International multiconference of engineers and
+computer scientists (Citeseer, 2010), vol. 1, pp. 77–80.
+[26] R. Dubčáková, Genetic programming and evolvable machines 12, 173 (2011).
+[27] M. Schmidt and H. Lipson, Science 324, 81 (2009).
+[28] H. Mhaskar, Q. Liao, and T. Poggio, Tech. Rep., Center
+for Brains, Minds and Machines (CBMM), arXiv (2016).
+[29] H. W. Lin, M. Tegmark, and D. Rolnick, Journal of Sta-
+
+tistical Physics 168, 1223 (2017).
+[30] T. Wu and M. Tegmark, Physical Review E 100, 033311
+(2019).
+[31] L. N. Smith and N. Topin, Super-convergence: Very fast
+training of residual networks using large learning rates
+(2018), URL https://openreview.net/forum?id=
+H1A5ztj3b.
+[32] L. N. Smith, A disciplined approach to neural network
+hyper-parameters: Part 1 – learning rate, batch size, momentum, and weight decay (2018), 1803.09820.
+[33] J. Howard et al., fastai, https://github.com/
+fastai/fastai (2018).
+[34] R. Feynman, R. Leighton, and M. Sands, The Feynman Lectures on Physics: The New Millennium Edition: Mainly Mechanics, Radiation, and Heat, v. 1 (Basic Books, 1963), ISBN 9780465040858, URL https:
+//books.google.com/books?id=d76DBQAAQBAJ.
+[35] R. Feynman, R. Leighton, and M. Sands, The Feynman Lectures on Physics, no. v. 2 in The Feynman Lectures on Physics (Pearson/Addison-Wesley, 1963), ISBN
+9780805390476, URL https://books.google.com/
+books?id=AbruAAAAMAAJ.
+[36] R. Feynman, R. Leighton, and M. Sands, The Feynman Lectures on Physics, no. v. 3 in The Feynman Lectures on Physics (Pearson/Addison-Wesley, 1963), ISBN
+9780805390490, URL https://books.google.com/
+books?id=_6XvAAAAMAAJ.
+[37] H. Goldstein, C. Poole, and J. Safko, Classical Mechanics (Addison Wesley, 2002), ISBN 9780201657029,
+URL
+https://books.google.com/books?id=
+tJCuQgAACAAJ.
+[38] J. D. Jackson, Classical electrodynamics (Wiley, New
+York, NY, 1999), 3rd ed., ISBN 9780471309321, URL
+http://cdsweb.cern.ch/record/490457.
+[39] S. Weinberg, Gravitation and Cosmology: Principles and
+Applications of the General Theory of Relativity (New
+York: Wiley, 1972).
+[40] M. Schwartz, Quantum Field Theory and the Standard Model, Quantum Field Theory and the Standard Model (Cambridge University Press, 2014), ISBN
+9781107034730, URL https://books.google.com/
+books?id=HbdEAgAAQBAJ.
+[41] J. McDermott, D. R. White, S. Luke, L. Manzoni,
+M. Castelli, L. Vanneschi, W. Jaskowski, K. Krawiec,
+R. Harper, K. De Jong, et al., in Proceedings of the 14th
+annual conference on Genetic and evolutionary computation (ACM, 2012), pp. 791–798.
+

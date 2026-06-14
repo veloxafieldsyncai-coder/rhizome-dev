@@ -1,0 +1,5184 @@
+Discovering governing equations from data:
+Sparse identification of nonlinear dynamical systems
+Steven L. Brunton1∗ , Joshua L. Proctor2 , J. Nathan Kutz3
+
+arXiv:1509.03580v1 [math.DS] 11 Sep 2015
+
+1
+
+Department of Mechanical Engineering, University of Washington, Seattle, WA 98195, United States
+2
+3
+
+Institute for Disease Modeling, Bellevue, WA 98004, United States
+
+Department of Applied Mathematics, University of Washington, Seattle, WA 98195, United States
+
+Abstract
+The ability to discover physical laws and governing equations from data is one of humankind’s greatest intellectual achievements. A quantitative understanding of dynamic constraints and balances in nature has facilitated rapid development of knowledge and enabled
+advanced technological achievements, including aircraft, combustion engines, satellites, and
+electrical power. In this work, we combine sparsity-promoting techniques and machine learning with nonlinear dynamical systems to discover governing physical equations from measurement data. The only assumption about the structure of the model is that there are only a few
+important terms that govern the dynamics, so that the equations are sparse in the space of possible functions; this assumption holds for many physical systems. In particular, we use sparse
+regression to determine the fewest terms in the dynamic governing equations required to accurately represent the data. The resulting models are parsimonious, balancing model complexity
+with descriptive ability while avoiding overfitting. We demonstrate the algorithm on a wide
+range of problems, from simple canonical systems, including linear and nonlinear oscillators
+and the chaotic Lorenz system, to the fluid vortex shedding behind an obstacle. The fluid example illustrates the ability of this method to discover the underlying dynamics of a system
+that took experts in the community nearly 30 years to resolve. We also show that this method
+generalizes to parameterized, time-varying, or externally forced systems.
+Keywords– Dynamical systems, Sparse regression, System identification, Compressed sensing.
+
+1
+
+Introduction
+
+Extracting physical laws from data is a central challenge in many diverse areas of science and engineering. There are many critical data-driven problems, such as understanding cognition from
+neural recordings, inferring patterns in climate, determining stability of financial markets, predicting and suppressing the spread of disease, and controlling turbulence for greener transportation
+and energy. With abundant data and elusive laws, it is likely that data-driven discovery of dynamics will continue to play an increasingly important role in these efforts.
+Advances in machine learning [19] and data science [29, 21] have promised a renaissance in
+the analysis and understanding of complex data, extracting patterns in vast multimodal data that
+is beyond the ability of humans to grasp. However, despite the rapid development of tools to
+understand static data based on statistical relationships, there has been slow progress in distilling physical models of dynamic processes from big data. This has limited the ability of data
+Corresponding author. Tel.: +1 (609)-921-6415.
+E-mail address: sbrunton@uw.edu (S.L. Brunton).
+∗
+
+1
+
+science models to extrapolate the dynamics beyond the attractor where they were sampled and
+constructed.
+An analogy may be drawn with the discoveries of Kepler and Newton. Kepler, equipped with
+the most extensive and accurate planetary data of the era, developed a data-driven model for the
+motion of the planets, resulting in his famous elliptic orbits. However, this was an attractor based
+view of the world, and it did not explain the fundamental dynamic relationships that give rise
+to planetary orbits, or provide a model for how these bodies react when perturbed. Newton, in
+contrast, discovered a dynamic relationship between momentum and energy that described the
+underlying processes responsible for these elliptic orbits. This dynamic model may be generalized
+to predict behavior in regimes where no data was collected. Newton’s model has proven remarkably robust for engineering design, making it possible to land a spacecraft on the moon, which
+would not have been possible using Kepler’s model alone.
+A seminal breakthrough by Schmidt and Lipson [4, 40] has resulted in a new approach to determine the underlying structure of a nonlinear dynamical system from data. This method uses
+symbolic regression (i.e., genetic programming [22]) to find nonlinear differential equations, and
+it balances complexity of the model, measured in the number of terms, with model accuracy. The
+resulting model identification realizes a long-sought goal of the physics and engineering communities to discover dynamical systems from data. However, symbolic regression is expensive, does
+not scale well to large systems of interest, and may be prone to overfitting unless care is taken to
+explicitly balance model complexity with predictive power. In [40], the Pareto front is used to find
+parsimonious models in a large family of candidate models.
+In this work, we re-envision the dynamical system discovery problem from an entirely new
+perspective of sparse regression [42, 14, 18] and compressed sensing [12, 8, 9, 7, 2, 43]. In particular,
+we leverage the fact that most physical systems have only a few relevant terms that define the
+dynamics, making the governing equations sparse in a high-dimensional nonlinear function space.
+Before the advent of compressive sampling, and related sparsity-promoting methods, determining
+the few non-zero terms in a nonlinear dynamical system would have involved a combinatorial
+brute-force search, meaning that the methods would not scale to larger problems with Moore’s
+law. However, powerful new theory guarantees that the sparse solution may be determined with
+high-probability using convex methods that do scale favorably with problem size. The resulting
+nonlinear model identification inherently balances model complexity (i.e., sparsity of right hand
+side dynamics) with accuracy, and the underlying convex optimization algorithms ensure that the
+method will be applicable to large-scale problems.
+The method described here shares some similarity to the recent dynamic mode decomposition
+(DMD), which is a linear dynamic regression [36, 39]. DMD is an example of an equation-free
+method [20], since it only relies on measurement data, but not on knowledge of the governing
+equations. Recent advances in the extended DMD have developed rigorous connections between
+DMD built on nonlinear observable functions and the Koopman operator theory for nonlinear
+dynamical systems [36, 30]. However, there is currently no theory for which nonlinear observable functions to use, so that assumptions must be made on the form of the dynamical system.
+In contrast, the method developed here results in a sparse, nonlinear regression that automatically
+determines the relevant terms in the dynamical system. The trend to exploit sparsity in dynamical
+systems is recent but growing [38, 33, 25, 6, 35, 1]. In this work, promoting sparsity in the dynamics results in parsimonious natural laws.
+
+2
+
+2
+
+Background
+
+There is a long and fruitful history of modeling dynamics from data, resulting in powerful techniques for system identification [23]. Many of these methods arose out of the need to understand
+complex flexible structures, such as the Hubble space telescope or the international space station.
+The resulting models have been widely applied in nearly every branch of engineering and applied
+mathematics, most notably for model-based feedback control. However, methods for system identification typically require assumptions on the form of the model, and most often result in linear
+dynamics, limiting their effectiveness to small amplitude transient perturbations around a fixed
+point of the dynamics [15].
+This work diverges from the seminal work on system identification, and instead builds on
+symbolic regression and sparse representation. In particular, symbolic regression is used to find
+nonlinear functions describing the relationships between variables and measured dynamics (i.e.,
+time derivatives). Traditionally, model complexity is balanced with describing capability using
+parsimony arguments such as the Pareto front. Here, we use sparse representation to determine
+the relevant model terms in an efficient and scalable framework.
+
+2.1
+
+Symbolic regression and machine learning
+
+Symbolic regression involves the determination of a function that relates input–output data, and it
+may be viewed as a form of machine learning. Typically, the function is determined using genetic
+programming, which is an evolutionary algorithm that builds and tests candidate functions out of
+simple building blocks [22]. These functions are then modified according to a set of evolutionary
+rules and generations of functions are tested until a pre-determined accuracy is achieved.
+Recently, symbolic regression has been applied to data from dynamical systems, and ordinary
+differential equations were discovered from measurement data [40]. Because it is possible to overfit with symbolic regression and genetic programming, a parsimony constraint must be imposed,
+and in [40], they accept candidate equations that are at the Pareto front of complexity.
+
+2.2
+
+Sparse representation and compressive sensing
+
+In many regression problems, only a few terms in the regression are important, and a sparse feature
+selection mechanism is required. For example, consider data measurements y ∈ Rm that may
+be a linear combination of columns from a feature library Θ ∈ Rm×p ; the linear combination of
+columns is given by entries of the vector ξ ∈ Rp so that:
+y = Θξ.
+
+(1)
+
+Performing a standard regression to solve for ξ will result in a solution with nonzero contributions
+in each element. However, if sparsity of ξ is desired, so that most of the entries are zero, then it is
+possible to add an L1 regularization term to the regression, resulting in the LASSO [14, 18, 42]:
+ξ = argmin kΘξ 0 − yk2 + λkξ 0 k1 .
+ξ0
+
+(2)
+
+The parameter λ weights the sparsity constraint. This formulation is closely related to the compressive sensing framework, which allows for the sparse vector ξ to be determined from relatively few incoherent random measurements [12, 8, 9, 7, 2, 43]. The sparse solution ξ to Eq. 1 may
+also be used for sparse classification schemes, such as the sparse representation for classification
+(SRC) [44]. Importantly, the compressive sensing and sparse representation architectures are convex and scale well to large problems, as opposed to brute-force combinatorial alternatives.
+3
+
+3
+
+Sparse identification of nonlinear dynamics (SINDy)
+
+In this work, we are concerned with identifying the governing equations that underly a physical
+system based on data that may be realistically collected in simulations or experiments. Generically,
+we seek to represent the system as a nonlinear dynamical system
+(3)
+
+ẋ(t) = f (x(t)).
+
+
+T
+The vector x(t) = x1 (t) x2 (t) · · · xn (t) ∈ Rn represents the state of the system at time t,
+and the nonlinear function f (x(t)) represents the dynamic constraints that define the equations of
+motion of the system. In the following sections, we will generalize Eq. (3) to allow the dynamics f
+to vary in time, and also with respect to a set of bifurcation parameters µ ∈ Rq .
+The key observation in this paper is that for many systems of interest, the function f often
+consists of only a few terms, making it sparse in the space of possible functions. For example,
+the Lorenz system in Eq. (22c) has very few terms in the space of polynomial functions. Recent
+advances in compressive sensing and sparse regression make this viewpoint of sparsity favorable,
+since it is now possible to determine which right hand side terms are non-zero without performing
+a computationally intractable brute-force search.
+To determine the form of the function f from data, we collect a time-history of the state x(t)
+and its derivative ẋ(t) sampled at a number of instances in time t1 , t2 , · · · , tm . These data are then
+arranged into two large matrices:
+state
+−−−−−−−−−−−−−−−−−−−−−−−−→
+
+
+
+x1 (t1 ) x2 (t1 ) · · · xn (t1 ) 
+ x1 (t2 ) x2 (t2 ) · · · xn (t2 ) 
+
+
+
+X =  . =  .
+.
+.
+.
+..
+..
+.. 
+ ..   ..
+
+
+
+xT (tm )
+x1 (tm ) x2 (tm ) · · · xn (tm ) y
+
+
+
+
+time
+
+xT (t1 )
+ xT (t2 ) 
+
+
+
+
+
+ 
+ẋT (t1 )
+ẋ1 (t1 )
+ ẋT (t2 )   ẋ1 (t2 )
+
+ 
+Ẋ =  .  =  .
+ ..   ..
+ẋT (tm )
+
+ẋ2 (t1 )
+ẋ2 (t2 )
+..
+.
+
+···
+···
+..
+.
+
+ẋ1 (tm ) ẋ2 (tm ) · · ·
+
+
+ẋn (t1 )
+ẋn (t2 ) 
+
+..  .
+. 
+
+(4a)
+
+(4b)
+
+ẋn (tm )
+
+Next, we construct an augmented library Θ(X) consisting of candidate nonlinear functions of the
+columns of X. For example, Θ(X) may consist of constant, polynomial and trigonometric terms:
+
+
+Θ(X) =  1 X XP2
+
+X P3
+
+···
+
+sin(X) cos(X) sin(2X) cos(2X) · · ·  .
+
+(5)
+
+Here, higher polynomials are denoted as XP2 , XP3 , etc. For example, XP2 denotes the quadratic
+nonlinearities in the state variable x, given by:
+ 2
+
+x1 (t1 ) x1 (t1 )x2 (t1 ) · · · x22 (t1 ) x2 (t1 )x3 (t1 ) · · · x2n (t1 )
+ x2 (t2 ) x1 (t2 )x2 (t2 ) · · · x2 (t2 ) x2 (t2 )x3 (t2 ) · · · x2 (t2 ) 
+n
+2
+ 1
+
+XP2 =  .
+(6)
+..
+..
+..
+..  .
+.
+.
+.
+.
+.
+ .
+.
+.
+.
+.
+.
+. 
+x21 (tm ) x1 (tm )x2 (tm ) · · ·
+
+x22 (tm ) x2 (tm )x3 (tm ) · · ·
+4
+
+x2n (tm )
+
+6
+7
+6
+7
+6
+73
+6
+6
+ẋ = 7
+(y 7
+x) 6 2
+(18)
+77
+6
+7
+6
+7
+6
+6
+77
+6
+7
+6
+7
+6
+6
+6
+7 x(⇢ 7 z) 6y 6
+7
+ẏ
+=
+(19)
+7
+· · ·7 .
+···
+⇥(X) ⇥(X)
+=6 =6
+(27) (27)
+7. 6 6
+6
+7
+77
+6
+7
+6
+7
+6
+7
+6
+6
+ż = 7
+xy 7
+z. 6 6
+(20)
+77
+6
+7
+6
+7
+6
+7
+6
+7
+7
+6
+7⇥(X)6= 6
+6
+7
+···
+7.
+6
+7
+6
+7
+6
+7
+4
+5
+6
+7
+6 the6standard parameters
+7
+7= 10, =
+6 8/3, ⇢ = 28, with an initial
+7
+For this example, we use
+condition
+6
+7
+6
+7
+7
+6
+7
+⇥
+⇤T ⇥
+⇤T6
+4
+5
+4
+5
+6
+7
+
+x y z = ODE)
+8 7 27
+Lorenz system (Nonlinear
+
+.
+
+6
+4
+
+(27)
+
+7
+5
+
+2
+y z x2 xy xz y 2 2 z 5333
+the nonlinear LorenzI.system
+to explore
+of
+2⇠13⇠2 ⇠33
+2 1 xdynamics:
+2 ẋ3 ẏ22
+2 3
+32
+ż 3chaotic
+Systemthe identification
+True Lorenz
+
+'xi_1'
+'xi_2'
+'xi_3'
+[
+0] [
+0] [
+0]
+[-9.9996] [27.9980] [
+0]
+ẋ =
+(y x)
+(18)
+'y'
+[ 9.9998] [-0.9997] [
+0]
+'z'
+[
+0] [
+0] [-2.6665]
+ẏ = x(⇢ z) y
+(19)
+'xx'
+[
+0] [
+0] [
+0]
+system
+ODE)
+'xy'
+[ (Nonlinear
+0] [
+0] [ 1.0000]
+ż = xy
+z.
+(20)4.2 Example 2: Lorenz
+(28)
+'xz'
+[
+0]
+[-0.9999]
+[
+0]
+Full Simulation
+Identified System, ⌘ = 0.01
+Identified System, ⌘ = 10
+'yy'
+[
+0]
+[
+[
+0] identification of chaot
+Here, we consider the nonlinear
+Lorenz
+system
+to0]
+explore
+the
+3
+'yz'
+[
+0] [
+0] [
+0]
+we use the standard parameters = 10, = 8/3, ⇢ = 28, with an initial condition
+...
+...
+...
+...
+⇤T
+7
+'yzzzz'
+[
+0]
+[
+0]
+[
+0]
+ẋ
+=
+(y
+x)
+3
+32
+7
+7 27 .
+'zzzzz'
+[
+0] [
+0] [
+0]
+7
+z
+z
+z
+6
+
+76
+
+7
+7
+7
+7
+6 76
+7
+7
+2
+3 6 7366 766 7
+2
+7
+6
+7
+6
+7
+6 7 66 766 7
+7
+7
+6
+7
+6
+7
+6 7 66 766 7
+7
+76 76
+7
+76 76
+7
+6
+7 6 7766 76
+6
+6 7
+7
+6
+7
+6
+7
+6
+7
+6
+7 6 7766 766 7
+6
+7
+Data
+In
+76 76
+7
+6
+7 6 7766 76
+6
+6 7
+7
+76 76
+7
+6
+7
+6
+7
+6
+7
+6
+7 6 7766 766 7
+6
+7
+7
+6
+7
+6
+7
+6
+7 6 ⇥(X)
+7766 =766 7
+6
+7
+76 76
+7.
+76 76
+7
+6
+7 6 7766 76
+6
+6 7
+7
+6
+7
+6
+7
+6
+7
+6
+7 6 7766 766 7
+6
+7
+76 76
+7
+6
+7 6 7766 76
+6
+6 7
+7
+76 76
+7
+6
+7
+6
+7
+6
+7
+2
+3
+6
+7 6 77662 766 7
+3
+26
+6
+7
+7
+6
+7
+7
+⇥(X)
+=
+.
+(28)
+⇥(X)
+=
+.
+(28)
+6
+7 6 7766 766 7
+6
+7
+76 76
+7
+50
+50
+50
+7
+6
+7 6 7766 746 7
+56 76
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7 6 77666 7 6 7
+6
+7
+7
+66
+6
+7
+2
+3
+2
+3
+6
+7
+6
+7 6 77666 7 6 7 2 7
+3 7
+6
+32
+7
+6 76
+6
+72
+6
+7
+6
+7
+6
+7
+6
+7 6 77666 7 6 7
+6
+7
+7
+6
+4
+5
+4
+6 6 6
+7
+7
+7
+6
+766 77666 7 6 77
+7
+6
+7 56
+76
+6
+7
+6 6 6
+76
+6
+7 25 777666 77666 7 6 777 666 7
+7
+6
+6
+25
+25
+6
+7
+7
+6
+6
+7
+6
+7
+6
+7
+7 66 7 6 7
+7 2 27
+2 2 7
+33
+33
+6 6
+3 3
+6
+6
+76
+7
+76
+6
+7
+4 6 4
+5
+6
+766 75666 7 6 77 6
+7
+7
+76
+6
+6
+6
+766 777666 7 6 77 6
+7
+76
+6
+7 6 67
+6
+6 6 7
+77
+7 7
+7
+6
+6
+766 77766 7 6 77 6
+6
+7
+6
+7
+6
+6
+6
+7
+6
+6
+7
+7 7
+7
+6
+7
+7 6
+6
+76
+6
+7
+6
+6
+7
+7
+6
+6
+7
+6
+7
+6
+7
+6
+7
+7
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6 · · · 6 6 7 . ⇥(X) =7 ⇥(X)
+⇥(X)
+(27)
+7
+6 · ·(27)
+76 (27)
+6 ···
+·
+=
+⇥(X)
+(27)
+7776
+6 67 . ·⇥(X)
+77 =6
+6
+7 7 =6
+·
+·
+·
+.
+6
+7
+·
+·
+·
+⇥(X)
+=
+.
+6
+7
+·
+·
+·
+=
+.
+6
+7
+·
+·
+⇥(X)
+=
+.
+⇥(X)
+=
+(27)
+6
+7
+650
+6
+7
+6
+7
+6
+7
+50
+5066 667 0
+6 7
+7 2
+6
+77
+7 7
+6
+6
+6
+7
+6
+764 7
+2
+6
+7
+0
+0
+6
+7
+6
+6
+7
+7
+6
+7
+7
+7 7
+60
+76
+6
+70 6
+0
+6 5 6 67 -20
+76
+6
+7
+6 6 7
+757446 5 4 57
+7
+7 7
+-20
+-20
+6
+7
+6
+7
+7
+6
+76 0 7 7
+6
+6 6 7
+77 6
+6 67
+6
+7
+70
+6
+0
+6
+7
+6
+7
+6
+7
+6
+7
+6
+6
+7
+6
+7
+6
+7
+6
+7
+7 7
+7
+7 ⇥(X)
+6⇥(X)
+7
+6 -50 77 6
+·6
+=6
+⇥(X)
+· · ·7
+·76
+· ·· · ·
+⇥(X)
+= 6=(27)
+6(27)
+7 .7 . 6 20 -50
+7 .7 . T20
+(27)
+· · ·· · · 7 .7 . 6 20 -50
+(27)
+6· ·
+7 6
+6 =6
+7
+6
+76
+6
+6 6 7
+77 6
+6 67
+77
+7 7
+6
+7 6
+6
+76
+7
+6
+76
+6 6 7
+77 6
+6 67
+77
+7 7
+6
+6
+5 6
+4
+54
+6 6 7
+77
+6 6
+77
+5
+4
+54
+4
+7 7
+6
+6 6
+77 6
+6 67
+77
+6
+7 7
+6 6 5
+77 4
+6 65
+77
+7 7
+4
+4
+6
+7
+6
+7
+6
+7
+6
+7
+7 7
+6 6
+6 6
+77
+77
+7 7
+4 4
+55
+4 4 50
+55
+5 5
+50
+50
+2 32
+3
+2 32
+3
+2 32
+3
+2 32
+3
+6
+2
+2 6 · ·7
+6 76
+6 726 7 y(t)7
+4x(t) y(t) z(t) x(t)2 x(t)y(t)
+7·5
+x(t)z(t)
+6 76
+6 76 7
+76 y(t)z(t) z(t)3 6
+6 7
+6 7
+6
+76
+
+7 7
+7 7
+7 7
+7 7
+7
+7 7
+7 7
+7 7
+7. 7
+· · · 77 7 .
+7 7
+7 7
+7 7
+7 7⌅
+7 7
+5 7
+
+=
+
+2 2
+
+6 6
+6 6
+6 6
+6 6
+6 62
+6 6
+6 6
+6 6
+6 6
+⇥(X)
+⇥(X)
+= 6= 6
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+4 4
+
+(t) z(t) x(t)
+
+ion
+
+0y
+
+50
+
+x
+
+···
+
+Ẋ
+
+Identified System, ⌘ = 0.01
+z
+
+25
+
+y
+23 23 2 2 3x3 2
+2 ẋ
+
+6 67 67 6
+7 76
+6 67 67 6 6 7 7 6
+3 63 67 67 6 6 7 7 6 2 2 2
+6 67 67 6
+7 76
+6 67 67 6 6 7 7 6
+6 6
+7 67 67 67 6 6 7 7 6
+7 67 67 67 6
+7 76 6 6 6
+77
+66 6
+0 77 6677 6677 6677 66 6
+6 77=77666 66 66 660
+-20 77 6677 6677 6677066=⇥(X)
+6 7 76 -50
+6
+66
+6
+7 67 67 67 6 6 7 720
+66
+6
+7 67 67 67 6
+7 76
+66
+6 6
+7 67 67 67 6 6 7⇥(X)
+7 6⇥(X)
+. =6 6= 6
+7⇥(X)
+67 67 67=
+6 6 7 .7 6
+6
+7 67 67 67 6 6 7 7 6 6 6 6
+6
+6
+7 67 67 67 6
+7⇥(X)
+7 =6
+6
+6
+7 67 67 67 6 6 7 7 6
+6
+7 67 67 67 6 6 7 7 4 6 6 6
+6
+7 67 67 67 6 6 7 7
+66
+6
+7 67 67 67 6
+77
+66 6
+7 67 67 67 6 6 7 7
+64 6
+4
+5 65 67 67 6 6 7 7
+6
+6 67 67 6
+77
+6 67 67 6 6 7 7
+6
+6 67 67 6 4 7 7
+4
+6 67 67 6
+77
+4 45 45 4
+55
+
+y 6
+
+4
+
+2
+
+Identified System, ⌘ = 10
+
+2 32
+
+4x(t) y(t) z(t) x(t)
+
+6 76
+7
+6 76
+7
+6 76
+7
+6 76
+7
+62 7 6
+32⇠13 666 777 6662 2ẏ3 23 77722 3x332y 666 777 666 xz 777
+32⇠23 666 777 666 2 2ż3 27773 2 2 3336662 777z666 xy 777
+32⇠33 666 777 666
+6 76
+7
+25
+25
+6 76
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6 76
+6 67 6
+7 77 6 7 6
+6 67 6
+7776 7 6
+76
+76
+6
+7
+6
+7
+6
+766 777 666 7773666663 6677 6677 777666 77 7777666 66 77 66 2 2 77
+7
+766 777 666 777 6663 663 6677 6677777 66 6 77777766666 77 66
+766 777 666 777 666
+7
+736 7 6 7 66 67 67 766 7 776 6 27 6
+36 7 6 7 6 6 67 6
+36 7 6 7 6
+7
+7
+7 6 6 77766 7 62
+7
+7
+7
+766 77 66 77766667 6677 6677 77666 77 77776 66 77 66 6 6 77
+766 77 66 77 667 667 6677 667777 66 6 7777776666 77 66
+766 77 66 77 66
+7
+6
+6
+776 7 6 7 677 6677 6677 66777 66 6 7777766 7 66 5077
+776 7 6 7 6
+7
+50 7
+77766 077 66 7777766666777 666777 666777 776666 777 7777766 66 6677 66 666 666 50
+7760 7 6 7 67 67 67 677 6 6 77766 7 66
+776 7 6 7 6
+7
+7
+76 -20
+7
+6 67 6 60 6 7
+7 6 77667 67 6
+7
+7
+0
+7
+6
+6
+7
+6
+7
+6
+7
+6
+7
+6
+6
+7
+6
+7
+6
+7
+6
+776 7 6 7 66
+7
+7
+6
+7
+6
+7
+7
+7
+6
+7
+6
+7
+6
+7
+-20
+⇥(X) =776 7 6 77667 67 6
+.
+6 67 6 6 6 (28)
+7 .⇥(X) =776
+7
+⇥(X)
+=77
+=
+.6⇥(X)
+(28)
+=
+=
+7766 7 66
+7 . ⇥(X) =776 7 6 7(28)
+66
+7 6 7 67(28)
+7
+21
+7
+6
+7
+6
+7
+7
+7
+6
+6
+7
+6
+6
+0
+0
+6
+7
+7
+6
+7
+7
+6
+7
+6
+7
+7
+6 6-50
+7 6 7 67 6
+6 7 66
+7
+67 6 6 6 7
+76
+-50
+7 67 6
+77
+7 6 62077
+76
+77766 77 66 7777666677 6677 6677 77666 7720
+7
+777666 777 666 777 666
+6
+7
+6
+7
+6
+7
+6
+7
+6
+6
+7
+6
+7
+67 6 6 6 7
+76 7 6 7 67 67 67 6
+77766 7 66
+76
+7
+6 6
+7
+6
+7
+776 7 6 77667 67 67 766 7 .77⇥(X)
+6
+7
+6
+7
+6
+7
+7
+6
+77 7 6 7 6
+6
+7
+6
+7
+6
+7
+7
+6
+7
+6 67(28)
+6 =6 7
+7 66
+7
+6. 6
+7 6 7 6 ⇥(X)
+7=
+(28)
+. 66
+(28)
+(28)776
+(28)776
+67 67 6
+6
+777
+7 67 6
+7=7
+66 7 77
+(28)
+(28)776. 7 6 776
+⇥(X)
+.
+7=6 6
+6 6⇥(X)
+6. 7(28)
+76
+6
+6. 7 6 7 67
+66
+7
+6 6 7
+750
+67 67 6
+7 77
+6
+7 67 6
+77
+6
+6 6 77
+76
+76 7 6 77
+6
+7
+6
+7
+6
+7
+7
+6
+6
+7
+6
+7
+6
+7
+6
+6
+7
+6
+7
+6
+7
+6
+7
+6
+777666. 777 666 777 50
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+7
+6
+7
+6
+7
+6
+7
+6
+6
+7
+···
+(27)
+···
+= 67 6 6 6 7 · · ·
+(27)
+⇥(X)
+=66
+76. 7 6 7 67 67 67 6
+66
+6
+7
+7
+6
+7
+7
+7
+77
+6
+7
+77764. 75 66 7777666677 6677 6677 77666 77⇥(X)
+7
+6
+774 5 6 7 66
+7
+6
+6 76 6
+76
+7
+75764 7 66
+7 67 6
+777 66 7776667 67 67 7766 7 7754 666 66777 666 66 66 777
+7
+6
+7
+74 5 6 7 67
+7
+7
+6 76
+6 76
+7
+7
+7 6 76
+77 6 77766677 6677 6677 7666 77 77 6 667 6 66 66 7
+777 66 77 66777 666777 666777 66677 666 6 777 77766 77 6666
+7
+7
+77 6 75665 67 67 766 7 7 6 67 6 4 4 7
+77 6 7 65 65 67 67 6 6 7 76 7 66
+777 66 77 66
+7
+77 4 5 46 67 67 566 7 7 4 65 4
+5
+77 4 5 4 66 6677 66577 66 6 77 774 5 46
+77 4 5 4
+5
+6 67 6
+7 66 7 7
+77
+6
+6
+77
+77
+25
+25
+6 67 6
+77
+6 67 6
+76
+76 6 77
+4
+5
+4
+55
+5
+55
+6 67 6
+6 67 6
+7 64 7 7
+76 4 77
+4 45 4
+55
+4 45 4
+55
+54
+54
+
+z
+
+2
+
+50
+
+(27)
+
+7
+76
+ẏ = x(⇢77 z) y
+76
+7
+76
+Coefficients77 of Dynamics
+Sparse
+7
+76
+76
+7
+ż = xy 777 z.
+6
+7
+7
+76
+7
+7
+76
+7
+76
+(27)
+7 . ·⇥(X)
+···
+=
+(27)
+(27)
+6
+7.
+·
+·
+.
+(27)
+7
+7
+7
+76
+7 = 10,
+we
+use
+the
+standard
+parameters
+= 8/3, ⇢ = 28, with an in
+76
+(21)For this example,
+7
+7
+7
+76
+y
+7
+⇥
+⇤
+⇥
+⇤
+6
+7
+7
+T
+7.
+7
+(27)
+76
+7
+x y x z = 5 8 7 27 (27)
+76
+7
+7
+76
+7
+5
+54
+⇥(X)
+7
+5
+
+z
+
+3
+
+System
+Identified
+III.
+2 32
+3
+3
+
+y(t)2
+
+6 76 T 7
+6 76
+7
+71
+36 76
+6 76
+7
+6 76
+7
+76 76 T 7
+76 76
+7
+76 76
+72
+76 76
+7
+76 76
+7
+76 76 T 7
+76 76
+7
+76 76
+73
+76 76
+7
+(28)
+76 76
+7.
+76 76
+7
+76 76
+7
+76 76
+7
+7 6 7(28)
+6
+7
+76 76
+7
+7
+6
+7
+6
+7
+(27)
+76 76
+7
+7
+56 76
+6 76
+7
+6 76
+7
+6 76
+7
+6 76
+7
+4 54
+5
+
+7
+x(t)y(t)
+7ẋ = x(t)z(t)
+⇥(x )⇠
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7.
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+5
+
+y(t)z(t)
+
+z(t)2
+
+ẏ = ⇥(x )⇠
+
+3
+
+· · ·5
+
+6
+7
+6
+7
+z
+z
+ż = ⇥(x )⇠
+6
+7 y
+(28)
+Full
+Simulation
+Identified System, ⌘ = 0.01
+Identified Syst
+y
+y
+25
+25
+6
+7
+x
+x
+x
+6
+7
+6
+7 20 (top)
+50
+Figure 3: Trajectories of the Lorenz system for short-time integration
+from t = 0 to t =
+6
+7
+50
+50
+and
+long-time
+integration
+from
+t
+=
+0
+to
+t
+=
+250
+(bottom).
+The
+full
+dynamics
+(left)
+are
+compared
+6
+7
+0
+0
+0y
+z
+z
+z
+6 0y
+7
+-20 the sparse
+-20
+with
+identified
+systems (middle,
+right)
+for various
+noise. The trajectories
+0
+0 ⇥(X)
+-506 additive
+(28)
+7 . are
+20 -50
+20 =
+25
+x
+x
+colored by t, the adaptive Runge-Kutta time step. This color
+6 is a proxy for local sensitivity.
+7
+6
+7
+6
+7
+503
+50
+2
+3
+0
+0
+0
+2
+3
+6
+72
+0
+0y
+50
+50
+-20
+-20
+-20
+6
+0 76 20 -50 y 7
+0
+0
+Solve
+to
+II. Sparse Regression
+6
+7for Active Terms in6 the Dynamics
+7
+-50
+20
+6
+7 21
+x
+x
+x 20
+6
+7
+6
+7
+6
+7
+21
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7z
+z
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+4
+5
+6
+7
+6
+7
+7
+25Figure 1: Schematic
+6
+7 25 algorithm for
+6
+7
+7
+of our
+sparse identification
+of 666nonlinear dynamics,
+demonstrated on 50
+6
+7
+7
+7
+50
+50
+⇥(X) =
+.
+(28) 6
+time
+
+20 -50
+
+y(t)z(t) z(t)
+
+x
+
+50
+
+2 2
+
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+⇥(X)
+= 6= 6
+⇥(X)
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+6 6
+4 4
+
+x(t)y(t) x(t)z(t) y(t)
+y
+
+(28)
+
+Model Out
+
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+⇥(X) = 6
+6 =6
+⇥(X)
+6
+6
+6
+6
+6
+6
+6
+6
+63
+6
+6
+6
+45
+6
+
+''
+
+(21)'1'
+'x'
+
+6
+
+7
+
+⇥(X) = 6
+
+⇥(X)
+(28) = 6
+
+7.
+
+7.
+
+(28)
+
+6
+7
+6
+7
+6
+7
+the Lorenz equations.
+Data
+is collected from
+measurements
+of the system,
+including
+a time history of the
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+7
+6
+6
+7
+7
+z
+z
+6
+7
+6
+7
+6 the states,7 Θ(X),
+50
+50
+50
+states
+X
+and
+derivatives
+Ẋ.
+Next,
+a
+library
+of
+nonlinear
+functions
+of
+is constructed. This
+6
+7
+6
+6
+7
+0
+6
+7 0
+6
+6
+7
+0y
+0y
+0 y 775
+25
+25
+4
+5 -20
+-20
+4
+4
+5
+0
+0
+nonlinear
+the-50fewest terms needed to satisfy Ẋ = Θ(X)Ξ. The few entries
+20 -50
+20 -50 library is used to find
+x feature
+x 20
+in the vectors of Ξ, solved for by sparse regression, denote the relevant terms50in the right-hand side of the
+50
+0
+ies of the Lorenz system for short-time integration from t = 0 to t = 20 (top) 0
+0y
+0y
+T
+T-20
+-20
+dynamics.
+Parameter
+values
+are
+σ
+=
+10,
+β
+=
+8/3,
+ρ
+=
+28,
+(x
+,
+y
+,
+z
+)
+=
+(−8,
+7,
+27)
+.
+The
+trajectory
+on
+the
+0
+0
+0
+0
+0
+21
+-50
+-50
+21
+21
+21
+10
+21
+21
+gration from t = 0 to t = 250 (bottom). The full dynamics (left) are compared
+x 20
+x 20
+attractor
+is colored
+by the
+adaptive
+time-stepare
+with red requiring a smaller tilmestep.
+21 21
+21required,
+21
+21Lorenz
+21
+entified systems (middle,
+right)
+for various
+additive
+noise.
+The trajectories
+
+adaptive Runge-Kutta time step. This color is a proxy for local sensitivity.
+
+21
+
+z
+
+25
+
+0
+-20
+
+0
+
+x
+
+20
+
+Figure 3: Trajectories of the Lorenz system for short-time integration from t = 0 to
+and long-time integration from t = 0 to t = 250 (bottom). The full dynamics (left)
+with the sparse identified systems (middle, right) for various additive noise. The tr
+colored by t, the adaptive Runge-Kutta time step. This color is a proxy for local se
+
+Each column of Θ(X) represents a candidate function for the right hand side of Eq. (3). There
+is tremendous freedom of choice in constructing the entries in this matrix of nonlinearities. Since
+we believe that only a few of these nonlinearities are active in each row of f , we may set up a
+sparse regression problem to determine the sparse vectors of coefficients Ξ = ξ 1 ξ 2 · · · ξ n
+21
+21
+that determine which nonlinearities are
+active, as illustrated in 21Fig. 1.
+Ẋ = Θ(X)Ξ.
+
+(7)
+
+21
+Each column 21ξ k of Ξ represents a sparse
+vector of coefficients21 determining which terms are
+active in 10
+the right hand side for one of the row equations ẋk = fk (x) in Eq. (3). Once Ξ has been
+10
+determined, a model of each row of the governing equations may be constructed as follows:
+
+ẋk = fk (x) = Θ(xT )ξ k .
+
+(8)
+
+Note that Θ(xT ) is a vector of symbolic functions of elements of x, as opposed to Θ(X), which is
+a data matrix. This results in the overall model
+ẋ = f (x) = ΞT (Θ(xT ))T .
+We may solve for Ξ in Eq. (7) using sparse regression.
+21
+5
+
+(9)
+
+3.1
+
+Algorithm for sparse representation of dynamics with noise
+
+There are a number of algorithms to determine sparse solutions Ξ to the regression problem in
+Eq. (7). Each column of Eq. (7) requires a distinct optimization problem to find the sparse vector
+of coefficients ξ k for the k th row equation.
+For the examples in this paper, the matrix Θ(X) has dimensions m × p, where p is the number
+of candidate nonlinear functions, and where m  p since there are more time samples of data
+than there are candidate nonlinear functions. In most realistic cases, the data X and Ẋ will be
+contaminated with noise so that Eq. (7) does not hold exactly. In the case that X is relatively clean
+but the derivatives Ẋ are noisy, the equation becomes
+Ẋ = Θ(X)Ξ + ηZ,
+
+(10)
+
+where Z is a matrix of independent identically distributed Gaussian entries with zero mean, and
+η is the noise magnitude. Thus we seek a sparse solution to an overdetermined system with noise.
+The LASSO [14, 42] from statistics works well with this type of data, providing a sparse regression. However, it may be computationally expensive for very large data sets.
+An alternative is to implement the sequential thresholded least-squares algorithm in Code (1).
+In this algorithm, we start with a least-squares solution for Ξ and then threshold all coefficients
+that are smaller than some cutoff value λ. Once the indices of the remaining non-zero coefficients
+are identified, we obtain another least-squares solution for Ξ onto the remaining indices. These
+new coefficients are again thresholded using λ, and the procedure is continued until the non-zero
+coefficients converge. This algorithm is computationally efficient, and it rapidly converges to a
+sparse solution in a small number of iterations. The algorithm also benefits from simplicity, with
+a single parameter λ required to determine the degree of sparsity in Ξ.
+Depending on the noise, it may still be necessary to filter the data X and derivative Ẋ before
+solving for Ξ. In particular, if only the data X is available, and Ẋ must be obtained by differentiation, then the resulting derivative matrix may have large noise magnitude. To counteract this, we
+use the total variation regularized derivative [10] to de-noise the derivative. An alternative would
+be to filter the data X and Ẋ, for example using the optimal hard threshold for singular values
+described in [13].
+It is important to note that previous algorithms to identify dynamics from data have been quite
+sensitive to noise [40]. The algorithm in Code (1) is remarkably robust to noise, and even when
+velocities must be approximated from noisy data, the algorithm works surprisingly well.
+Code 1: Sparse representation algorithm in Matlab.
+%% compute Sparse regression: sequential least squares
+Xi = Theta\dXdt; % initial guess: Least-squares
+% lambda is our sparsification knob.
+for k=1:10
+smallinds = (abs(Xi)<lambda);
+% find small coefficients
+Xi(smallinds)=0;
+% and threshold
+for ind = 1:n
+% n is state dimension
+biginds = ˜smallinds(:,ind);
+% Regress dynamics onto remaining terms to find sparse Xi
+Xi(biginds,ind) = Theta(:,biginds)\dXdt(:,ind);
+end
+end
+
+6
+
+3.2
+
+Cross-validation to determine parsimonious sparse solution on Pareto front
+
+To determine the sparsification parameter λ in the algorithm in Code (1), it is helpful to use the
+concept of cross-validation from machine learning. It is always possible to hold back some test
+data apart from the training data to test the validity of models away from training values. In
+addition, it is important to consider the balance of model complexity (given by the number of
+nonzero coefficients in Ξ) with the model accuracy. There is an “elbow” in the curve of accuracy
+vs. complexity parameterized by λ, the so-called Pareto front. This value of λ represents a good
+tradeoff between complexity and accuracy, and it is similar to the approach taken in [40].
+
+3.3
+
+Extensions and Connections
+
+There are a number of extensions to the basic theory above that generalize this approach to a
+broader set of problems. First, the method is generalized to a discrete-time formulation, establishing a connection with the dynamic mode decomposition (DMD). Next, high-dimensional systems
+obtained from discretized partial differential equations are considered, extending the method to
+incorporate dimensionality reduction techniques to handle big data. Finally, the sparse regression
+framework is modified to include bifurcation parameters, time-dependence, and external forcing.
+3.3.1
+
+Discrete-time representation
+
+The aforementioned strategy may also be implemented on discrete-time dynamical systems:
+(11)
+
+xk+1 = f (xk ).
+
+There are a number of reasons to implement Eq. (11). First, many systems, such as the logistic
+map in Eq. (26) are inherently discrete-time systems. In addition, it may be possible to recover
+specific integration schemes used to advance Eq. (3). The discrete-time formulation also foregoes
+the calculation of a derivative from noisy data. The data collection will now involve two matrices
+and Xm
+Xm−1
+2 :
+1
+
+
+
+
+xT1
+xT2
+
+
+
+
+xT2
+xT3
+
+
+
+
+m
+Xm−1
+=
+,
+X
+=
+(12)
+
+
+.
+
+.
+.
+2
+1
+.
+.
+
+
+
+
+.
+.
+xTm−1
+
+xTm
+
+The continuous-time sparse regression problem in Eq. (7) now becomes:
+m−1
+Xm
+)Ξ
+2 = Θ(X1
+
+(13)
+
+and the function f is the same as in Eq. (9).
+In the discrete setting in Eq. (11), and for linear dynamics, there is a striking resemblance to
+dynamic mode decomposition. In particular, if Θ(x) = x, so that the dynamical system is linear,
+then Eq. (13) becomes
+m−1
+Xm
+Ξ
+2 = X1
+
+=⇒
+
+T
+T
+(Xm
+Xm−1
+2 ) =Ξ
+1
+
+T
+
+.
+
+(14)
+
+This is equivalent to the DMD, which seeks a dynamic regression onto linear dynamics ΞT . In
+particular, ΞT is n × n dimensional, which may be prohibitively large for a high-dimensional state
+x. Thus, DMD identifies the dominant terms in the eigendecomposition of ΞT .
+7
+
+3.3.2
+
+High-dimensional systems, partial differential equations, and dimensionality reduction
+
+Often, the physical system of interest may be naturally represented by a partial differential equation (PDE) in a few spatial variables. If data is collected from a numerical discretization or from
+experimental measurements on a spatial grid, then the state dimension n may be prohibitively
+large. For example, in fluid dynamics, even simple two-dimensional and three-dimensional flows
+may require tens of thousands up to billions of variables to represent the discretized system.
+The method described above is prohibitive for a large state dimension n, both because of the
+factorial growth of Θ in n and because each of the n row equations in Eq. (8) requires a separate optimization. Fortunately, many high-dimensional systems of interest evolve on a low-dimensional
+manifold or attractor that may be well-approximated using a dimensionally reduced low-rank basis Ψ [16, 27]. For example, if data X is collected for a high-dimensional system as in Eq. (4a), it is
+possible to obtain a low-rank approximation using the singular value decomposition (SVD):
+XT = ΨΣV∗ .
+
+(15)
+
+In this case, the state x may be well approximated in a truncated modal basis Ψr , given by the first
+r columns of Ψ from the SVD:
+x ≈ Ψr a,
+
+(16)
+
+ȧ = fP (a).
+
+(17)
+
+where a is an r-dimensional vector of mode coefficients. We assume that this is a good approximation for a relatively low rank r. Thus, instead of using the original high-dimensional state x, it
+is possible to obtain a sparse representation of the Galerkin projected dynamics fP in terms of the
+coefficients a:
+There are many choices for a low-rank basis, including proper orthogonal decomposition (POD) [3,
+16], based on the SVD.
+3.3.3
+
+External forcing, bifurcation parameters, and normal forms
+
+In practice, many real-world systems depend on parameters, and dramatic changes, or bifurcations, may occur when the parameter is varied [15, 26]. The algorithm above is readily extended
+to encompass these important parameterized systems, allowing for the discovery of normal forms
+associated with a bifurcation parameter µ. First, we append µ to the dynamics:
+ẋ = f (x; µ)
+
+(18a)
+
+µ̇ = 0.
+
+(18b)
+
+It is then possible to identify the right hand side f (x; µ) as a sparse combination of functions of
+components in x as well as the bifurcation parameter µ. This idea is illustrated on two examples,
+the one-dimensional logistic map and the two-dimensional Hopf normal form.
+Time-dependence, known external forcing or control u(t) may also be added to the dynamics:
+ẋ = f (x, u(t), t)
+
+(19a)
+
+ṫ = 1.
+
+(19b)
+
+This generalization makes it possible to analyze systems that are externally forced or controlled.
+For example, the climate is both parameterized [26] and has external forcing, including carbon
+dioxide and solar radiation. The financial market presents another important example with forcing and active feedback control, in the form of regulations, taxes, and interest rates.
+8
+
+4
+
+Results
+
+We demonstrate the methods described in Sec. 3 on a number of canonical systems, ranging from
+simple linear and nonlinear damped oscillators, to noisy measurements of the fully chaotic Lorenz
+system, and to measurements of the unsteady fluid wake behind a circular cylinder, extending this
+method to nonlinear partial differential equations (PDEs) and high-dimensional data. Finally, we
+show that bifurcation parameters may be included in the sparse models, recovering the correct
+normal forms from noisy measurements of the logistic map and the Hopf normal form.
+
+4.1
+
+Example 1: Simple illustrative systems
+
+4.1.1
+
+Example 1a: Two-dimensional damped oscillator (linear vs. nonlinear)
+
+In this example, we consider the two-dimensional damped harmonic oscillator with either linear
+or cubic dynamics, as in Eq. (20). The dynamic data and the sparse identified model are shown in
+Fig. 2. The correct form of the nonlinearity is obtained in each case; the augmented nonlinear library Θ(x) includes polynomials in x up to fifth order. The sparse identified model and algorithm
+parameters are shown in the Appendix in Tables 1 and 2.
+ 
+  3
+  
+  
+d x
+d x
+x
+x
+−0.1
+2
+−0.1
+2
+(20)
+=
+=
+−2 −0.1 y
+−2 −0.1 y 3
+dt y
+dt y
+Linear System
+2
+
+Cubic Nonlinearity
+2
+
+x1
+x2
+model
+
+xk
+
+xk
+
+0
+
+0
+
+-2
+0
+
+5
+
+10
+
+15
+
+Time
+
+2
+
+20
+
+-2
+0
+
+25
+
+10
+
+15
+
+Time
+
+20
+
+25
+
+2
+
+xk
+model
+
+x2
+
+x2
+
+0
+
+-2
+-2
+
+5
+
+0
+
+0
+
+x1
+
+-2
+-2
+
+2
+
+0
+
+x1
+
+2
+
+Figure 2: Comparison of linear system (left) and system with cubic nonlinearity (right). The sparse identified system correctly identifies the form of the dynamics and accurately reproduces the phase portraits.
+
+9
+
+4.1.2
+
+Example 1b: Three-dimensional linear system
+
+A linear system with three variables and the sparse approximation are shown in Fig. 3. In this
+case, the dynamics are given by
+ 
+
+ 
+x
+−0.1 −2
+0
+x
+d  
+y
+−0.1
+0  y  .
+=  2
+(21)
+dt
+z
+0
+0
+−0.3
+z
+The sparse identification algorithm correctly identifies the system in the space of polynomials up
+to second or third order, and the sparse model is given in Table 3. Interestingly, including polynomial terms of higher order (e.g. orders 4 or 5) introduces a degeneracy in the sparse identification algorithm, because linear combinations of powers of eλt may approximate other exponential
+rates. This unexpected degeneracy motivates a hierarchical approach to identification, where subsequently higher order terms are included until the algorithm either converges or diverges.
+
+1
+
+2
+
+x3
+xk
+
+0.5
+
+0
+0
+-2
+-2
+0
+
+25
+
+Time
+
+0
+
+x1
+
+50
+
+2 -2
+
+0
+
+2
+
+x2
+
+Figure 3: Three-dimensional linear system (solid colored lines) is well-captured by sparse identified system
+(dashed black line).
+
+4.2
+
+Example 2: Lorenz system (Nonlinear ODE)
+
+Here, we consider the nonlinear Lorenz system [24] to explore the identification of chaotic dynamics evolving on an attractor, shown in Fig. 1:
+ẋ = σ(y − x)
+
+ẏ = x(ρ − z) − y
+ż = xy − βz.
+
+(22a)
+(22b)
+(22c)
+
+Although these equations give rise to rich and chaotic dynamics that evolve on an attractor, there
+are only a few terms in the right-hand side of the equations. Figure 1 shows a schematic of how
+data is collected for this example, and how sparse dynamics are identified in a space of possible
+right-hand side functions using convex `1 -minimzation.
+For this example, data is collected for the Lorenz system, and stacked into two large data
+matrices X and Ẋ, where each row of X is a snapshot of the state x in time, and each row of Ẋ
+
+10
+
+is a snapshot of the time derivative of the state ẋ in time. Here, the right-hand side dynamics are
+identified in the space of polynomials Θ(X) in (x, y, z) up to fifth order:
+
+
+
+Θ(X) = x(t) y(t) z(t) x(t)2 x(t)y(t) x(t)z(t) y(t)2 y(t)z(t) z(t)2 · · · z(t)5  . (23)
+
+Each column of Θ(X) represents a candidate function for the right hand side of Eq. (3), and a
+sparse regression determines which terms are active in the dynamics, as in Fig. 1, and Eq. (7).
+Zero-mean Gaussian measurement noise with variance η is added to the derivative calculation
+to investigate the effect of noisy derivatives. The short-time (t = 0 to t = 20) and long-time (t = 0
+to t = 250) system reconstruction is shown in Fig. 4 for two different noise values, η = 0.01 and
+η = 10. The trajectories are also shown in dynamo view in Fig. 5, and the `2 error vs. time for
+increasing noise η is shown in Fig. 6. Although the `2 error increases for large noise values η,
+the form of the equations, and hence the attractor dynamics, are accurately captured. Because
+the system has a positive Lyapunov exponent, small differences in model coefficients or initial
+conditions grow exponentially, until saturation, even though the attractor may remain unchanged.
+In the Lorenz example, the ability to capture dynamics on the attractor is more important than
+the ability to predict an individual trajectory, since chaos will quickly cause any small variations
+in initial conditions or model coefficients to diverge exponentially. As shown in Fig. 1, our sparse
+model identification algorithm accurately reproduces the attractor dynamics from chaotic trajectory measurements. The algorithm not only identifies the correct linear and quadratic terms in the
+dynamics, but it accurately determines the coefficients to within .03% of the true values. When
+the derivative measurements are contaminated with noise, the correct dynamics are identified,
+and the attractor is well-preserved for surprisingly large noise values. When the noise is too large,
+the structure identification fails before the coefficients become too inaccurate.
+Full Simulation
+Identified System, η = 0.01
+Identified System, η = 10
+50
+
+50
+
+50
+
+z
+
+z
+
+z
+
+25
+0
+-20
+
+25
+
+0
+
+x
+
+20 -50
+
+0y
+
+50
+
+0
+-20
+
+25
+
+0
+
+x
+
+20 -50
+
+0y
+
+50
+
+0
+-20
+
+50
+
+50
+
+50
+
+z
+
+z
+
+z
+
+25
+0
+-20
+
+25
+
+0
+
+x
+
+20 -50
+
+0y
+
+50
+
+0
+-20
+
+0
+
+x
+
+20 -50
+
+0y
+
+50
+
+25
+
+0
+
+x
+
+20 -50
+
+0y
+
+50
+
+0
+-20
+
+0
+
+x
+
+20 -50
+
+0y
+
+50
+
+Figure 4: Trajectories of the Lorenz system for short-time integration from t = 0 to t = 20 (top) and
+long-time integration from t = 0 to t = 250 (bottom). The full dynamics (left) are compared with the sparse
+identified systems (middle, right) for various additive noise. The trajectories are colored by ∆t, the adaptive
+Runge-Kutta time step. This color is a proxy for local sensitivity.
+
+11
+
+For this example, we use the standard parameters σ = 10, β = 8/3, ρ = 28, with an initial
+
+T
+
+T
+condition x y z = −8 7 27 . Data is collected from t = 0 to t = 100 with a time-step of
+∆t = 0.001.
+η = 0.01
+η = 10
+30
+
+x
+
+30
+
+x
+
+0
+
+-30
+0
+
+5
+
+10
+
+15
+
+-30
+0
+
+20
+
+30
+
+y
+
+5
+
+10
+
+15
+
+20
+
+10
+
+15
+
+20
+
+30
+
+y
+
+0
+
+-30
+0
+
+0
+
+5
+
+10
+
+Time
+
+15
+
+0
+
+-30
+0
+
+20
+
+5
+
+Time
+
+Figure 5: Dynamo view of trajectories of the Lorenz system. The exact system is shown in black (−) and
+the sparse identified system is shown in the dashed red arrow (−−).
+
+102
+100
+
+Error
+
+10−2
+10−4
+
+Increasing η
+10−6
+10−8
+
+0
+
+5
+
+10
+
+Time
+
+15
+
+20
+
+Figure 6: Error vs. time for sparse identified systems generated from data with increasing sensor noise η.
+This error corresponds to the difference between solid black and dashed red curves in Fig. 5. Sensor noise
+values are η ∈ {0.0001, 0.001, 0.01, 0.1, 1.0, 10.0}.
+12
+
+4.3
+
+Example 3: Fluid wake behind a cylinder (Nonlinear PDE)
+
+The Lorenz system is a low-dimensional model of more realistic high-dimensional partial differential equation (PDE) models for fluid convection in the atmosphere. Many systems of interest are
+governed by PDEs [38], such as weather and climate, epidemiology, and the power grid, to name
+a few. Each of these examples are characterized by big data, consisting of large spatially resolved
+measurements consisting of millions or billions of states and spanning orders of magnitude of
+scale in both space and time. However, many high-dimensional, real-world systems evolve on a
+low-dimensional attractor, making the effective dimension much smaller [16].
+Here we generalize the sparse identification of nonlinear dynamics method to an example
+in fluid dynamics that typifies many of the challenges outlined above. Data is collected for the
+fluid flow past a cylinder at Reynolds number 100 using direct numerical simulations of the twodimensional Navier-Stokes equations [41, 11]. Then, the nonlinear dynamic relationship between
+the dominant coherent structures is identified from these flow field measurements with no knowledge of the governing equations.
+The low-Reynolds number flow past a cylinder is a particularly interesting example because
+of its rich history in fluid mechanics and dynamical systems. It has long been theorized that
+turbulence may be the result of a sequence of Hopf bifurcations that occur as the Reynolds number
+of the flow increases [37]. The Reynolds number is a rough measure of the ratio of inertial and
+viscous forces, and an increasing Reynolds number may correspond, for example, to increasing
+flow velocity, giving rise to more rich and intricate structures in the fluid.
+After 15 years, the first Hopf bifurcation was discovered in a fluid system, in the transition
+from a steady laminar wake to laminar periodic vortex shedding at Reynolds number 47 [17,
+45, 32]. This discovery led to a long-standing debate about how a Hopf bifurcation, with cubic
+nonlinearity, can be exhibited in a Navier-Stokes fluid with quadratic nonlinearities. After 15
+more years, this was finally resolved using a separation of time-scales argument and a mean-field
+model [31], shown in Eq. (24). It was shown that coupling between oscillatory modes and the
+base flow gives rise to a slow manifold (see Fig. 7, left), which results in algebraic terms that
+approximate cubic nonlinearities on slow timescales.
+
+Limit cycle
+
+z
+
+A - vortex shedding
+
+ux - POD mode 1
+
+B - mean flow
+
+uy - POD mode 2
+
+C - unstable fixed point
+
+uz - shift mode
+
+A
+B
+
+Slow
+manifold
+x
+
+C
+
+y
+
+2
+1
+0
+-1
+-2
+-1 0 1 2 3 4 5 6 7 8
+
+Figure 7: Illustration of the low-rank dynamics underlying the periodic vortex shedding behind a circular
+cylinder at low Reynolds number, Re = 100.
+
+13
+
+This example provides a compelling test-case for the proposed algorithm, since the underlying form of the dynamics took nearly three decades to uncover. Indeed, the sparse dynamics
+algorithm correctly identifies the on-attractor and off-attractor dynamics using quadratic nonlinearities and preserves the correct slow-manifold dynamics. It is interesting to note that when the
+off-attractor trajectories are not included in the system identification, the algorithm incorrectly
+identifies the dynamics using cubic nonlinearities, and fails to correctly identify the dynamics
+associated with the shift mode, which connects the mean flow to the unstable steady state.
+4.3.1
+
+Direct numerical simulation
+
+The direct numerical simulation involves a fast multi-domain immersed boundary projection
+method [41, 11]. Four grids are used, each with a resolution of 450 × 200, with the finest grid
+having dimensions of 9 × 4 cylinder diameters and the largest grid having dimensions of 72 × 32
+diameters. The finest grid has 90,000 points, and each subsequent coarser grid has 67,500 distinct
+points. Thus, if the state includes the vorticity at each grid point, then the state dimension is
+292,500. The vorticity field on the finest grid is shown in Fig. 7. The code is non-dimensionalized
+so that the cylinder diameter and free-stream velocity are both equal to one: D = 1 and U∞ = 1,
+respectively. The simulation time-step is ∆t = 0.02 non dimensional time units.
+4.3.2
+
+Mean field model
+
+To develop a mean-field model for the cylinder wake, first we must reduce the dimension of
+the system. The proper orthogonal decomposition (POD) [16], provides a low-rank basis that is
+optimal in the L2 sense, resulting in a hierarchy of orthonormal modes that are ordered by mode
+energy. The first two most energetic POD modes capture a significant portion of the energy; the
+steady-state vortex shedding is a limit cycle in these coordinates. An additional mode, called the
+shift mode, is included to capture the transient dynamics connecting the unstable steady state
+with the mean of the limit cycle [31] (i.e., the direction connecting point ‘C’ to point ‘B’ in Fig. 7).
+In the three-dimensional coordinate system described above, the mean-field model for the
+cylinder dynamics are given by:
+ẋ = µx − ωy + Axz
+ẏ = ωx + µy + Ayz
+2
+
+2
+
+ż = −λ(z − x − y ).
+
+(24a)
+(24b)
+(24c)
+
+If λ is large, so that the z-dynamics are fast, then the mean flow rapidly corrects to be on the (slow)
+manifold z = x2 + y 2 given by the amplitude of vortex shedding. When substituting this algebraic
+relationship into Eqs. 24a and 24b, we recover the Hopf normal form on the slow manifold.
+Remarkably, similar dynamics are discovered by the sparse dynamics algorithm, purely from
+data collected from simulations. The identified model coefficients, shown in Table 5, only include
+quadratic nonlinearities, consistent with the Navier-Stokes equations. Moreover, the transient
+behavior, shown in Figs. 9 and 10, is captured qualitatively for solutions that do not start on the
+slow manifold. When the off-attractor dynamics in Fig. 9 are not included in the training data, the
+model incorrectly identifies a simple Hopf normal form in x and y with cubic nonlinearities.
+The data from Fig. 10 was not included in the training data, and although qualitatively similar,
+the identified model does not exactly reproduce the transients. Since this initial condition had
+twice the fluctuation energy in the x and y directions, the slow manifold approximation may not
+be valid here. Relaxing the sparsity condition, it is possible to obtain models that agree almost
+perfectly with the data in Figs. 8-10, although the model includes higher order nonlinearities.
+14
+
+Full Simulation
+
+Identified System
+
+0
+
+0
+
+z
+
+z
+
+-75
+
+-75
+
+-150
+-200
+
+200
+0
+
+x
+
+200
+
+-200
+
+0
+
+-150
+-200
+
+y
+
+200
+0
+
+x
+
+200
+
+-200
+
+0
+
+y
+
+Figure 8: Evolution of the cylinder wake trajectory in reduced coordinates. The full simulation (left) comes
+from direct numerical simulation of the Navier-Stokes equations, and the identified system (right) captures
+the dynamics on the slow manifold. Color indicates simulation time.
+
+Full Simulation
+
+Identified System
+
+0
+
+0
+
+z
+
+z
+
+-75
+
+-75
+
+-150
+-200
+
+200
+0
+
+x
+
+200
+
+-200
+
+0
+
+-150
+-200
+
+y
+
+200
+0
+
+x
+
+200
+
+-200
+
+0
+
+y
+
+Figure 9: Evolution of the cylinder wake trajectory starting from a flow state initialized at the mean of
+the steady-state limit cycle. Both the full simulation and sparse model capture the off-attractor dynamics,
+characterized by rapid attraction of the trajectory onto the slow manifold.
+
+Full Simulation
+
+Identified System
+
+50
+
+50
+
+z
+
+z
+0
+
+-50
+-200
+
+0
+200
+0
+
+x
+
+200
+
+-200
+
+0
+
+-50
+-200
+
+y
+
+200
+0
+
+x
+
+200
+
+-200
+
+0
+
+y
+
+Figure 10: This simulation corresponds to an initial condition obtained by doubling the magnitude of the
+limit cycle behavior. This data was not included in the training of the sparse model.
+
+15
+
+4.4
+
+Example 4: Bifurcations and Normal Forms
+
+It is also possible to identify normal forms associated with a bifurcation parameter µ by suspending it in the dynamics as a variable:
+ẋ = f (x; µ)
+
+(25a)
+
+µ̇ = 0.
+
+(25b)
+
+It is then possible to identify the right hand side f (x; µ) as a sparse combination of functions of
+components in x as well as the bifurcation parameter µ. This idea is illustrated on two examples,
+the one-dimensional logistic map and the two-dimensional Hopf normal form.
+4.4.1
+
+Logistic map
+
+The logistic map is a classical model that exhibits a cascade of bifurcations, leading to chaotic
+trajectories. The dynamics with stochastic forcing ηk and parameter µ are given by
+(26)
+
+xk+1 = µxk (1 − xk ) + ηk .
+
+Sampling the stochastic system at ten parameter values of µ, the algorithm correctly identifies the
+underlying parameterized dynamics, shown in Fig. 11 and Table 6.
+Stochastic System
+
+1
+
+Sparse Identified System
+
+1
+
+2
+
+2
+
+µ
+
+µ
+3
+
+4
+
+3
+
+0
+
+0.5
+
+x
+
+4
+
+1
+
+0
+
+3.45
+
+3.45
+
+3.63
+
+3.63
+
+µ
+
+µ
+
+3.82
+
+3.82
+
+4
+
+0
+
+0.5
+
+x
+
+4
+
+1
+
+0
+
+0.5
+
+1
+
+0.5
+
+1
+
+x
+
+x
+
+Figure 11: Attracting sets of the logistic map vs. the parameter µ. (left) Data from stochastically
+forced system and (right) the sparse identified system. Data is sampled at rows indicated in red for
+µ ∈ {2.5, 2.75, 3, 3.25, 3.5, 3.75, 3.8, 3.85, 3.9, 3.95}. The forcing ηk is Gaussian with magnitude 0.025.
+16
+
+4.4.2
+
+Hopf normal form
+
+The final example illustrating the ability of the sparse dynamics method to identify parameterized
+normal forms is the Hopf normal form [28]. Noisy data is collected from the Hopf system
+ẋ = µx + ωy − Ax(x2 + y 2 )
+2
+
+(27a)
+
+2
+
+(27b)
+
+ẏ = −ωx + µy − Ay(x + y )
+
+for various values of the parameter µ. Data is collected on the blue and red trajectories in Fig. 12,
+and noise is added to simulate sensor noise. The total variation derivative [10] is used to de-noise
+the derivative for use in the algorithm.
+The sparse model identification algorithm correctly identifies the Hopf normal form, with
+model parameters given in Table 7. The noise-free model reconstruction is shown in Fig. 13. Note
+that with noise in the training data, although the model terms are correctly identified, the actual
+values of the cubic terms are off by almost 8%. Collecting more training data or reducing the noise
+magnitude both improve the model agreement.
+
+1
+
+y
+0
+
+1
+0
+
+-1
+-0.2
+
+0.
+
+µ
+
+0.2
+
+0.4
+
+0.6
+
+-1
+
+x
+
+Figure 12: Training data to identify Hopf normal form. Blue trajectories denote solutions that start outside
+of the fixed point for µ < 0 or the limit cycle for µ > 0, and red trajectories denote solutions that start inside
+of the limit cycle.
+
+1
+
+y
+0
+
+1
+0
+
+-1
+-0.2
+
+0.
+
+µ
+
+0.2
+
+0.4
+
+0.6
+
+-1
+
+x
+
+Figure 13: Sparse model captures the Hopf normal form. Initial conditions are the same as in Fig. 12
+
+17
+
+5
+
+Discussion
+
+In summary, we have demonstrated a powerful new technique to identify nonlinear dynamical
+systems from data without assumptions on the form of the governing equations. This builds on
+prior work in symbolic regression but with innovations related to sparse regression, which allow our algorithms to scale to high-dimensional systems. We demonstrate this new method on
+a number of example systems exhibiting chaos, high-dimensional data with low-rank coherence,
+and parameterized dynamics. As shown in the Lorenz example, the ability to predict a specific
+trajectory may be less important than the ability to capture the attractor dynamics. The example
+from fluid dynamics highlights the remarkable ability of this method to extract dynamics in a
+fluid system that took three decades for experts in the community to explain. There are numerous
+fields where this method may be applied, where there is ample data and the absence of governing
+equations, including neuroscience, climate science, epidemiology, and financial markets. Fields
+that already use genetic programming, such as machine learning control for turbulent fluid systems [5, 34], may also benefit. Finally, normal forms may be discovered by including parameters
+in the optimization, as shown on two examples. The identification of sparse governing equations
+and parameterizations marks a significant step toward the long-held goal of intelligent, unassisted
+identification of dynamical systems.
+A number of open problems remain surrounding the dynamical systems aspects of this procedure. For example, many systems possess dynamical symmetries and conserved quantities that
+may alter the form of the identified dynamics. For example, the degenerate identification of a
+linear system in a space of high-order polynomial nonlinearities suggest a connection with nearidentity transformations and dynamic similarity. We believe that this may be a fruitful line of
+research. Finally, it will be important to identify which approximating function space to use based
+on the data available. For example, it may be possible to improve the function space to make the
+dynamics more sparse through subsequent coordinate transformations [15].
+Data science is not a panacea for all problems in science and engineering, but used in the
+right way, it provides a principled approach to maximally leverage the data that we have and
+inform what new data to collect. Big data is happening all across the sciences, where the data
+is inherently dynamic, and where traditional approaches are prone to overfitting. Data discovery
+algorithms that produce parsimonious models are both rare and desirable. Data-science will only
+become more critical to efforts in science in engineering, where data is abundant, but physical
+laws remain elusive. These efforts include understanding the neural basis of cognition, extracting
+and predicting coherent changes in the climate, stabilizing financial markets, managing the spread
+of disease, and controlling turbulence,
+
+Acknowledgements
+We gratefully acknowledge valuable discussions with Bingni W. Brunton and Bernd R. Noack.
+SLB acknowledges support from the University of Washington department of Mechanical Engineering and as a Data Science Fellow in the eScience Institute (NSF, Moore-Sloan Foundation,
+Washington Research Foundation). JLP thanks Bill and Melinda Gates for their active support of
+the Institute for Disease Modeling and their sponsorship through the Global Good Fund. JNK
+acknowledges support from the U.S. Air Force Office of Scientific Research (FA9550-09-0174).
+
+18
+
+References
+[1] Zhe Bai, Thakshila Wimalajeewa, Zachary Berger, Guannan Wang, Mark Glauser, and Pramod K Varshney. Lowdimensional approach for reconstruction of airfoil data via compressive sensing. AIAA Journal, pages 1–14, 2014.
+[2] R. G. Baraniuk. Compressive sensing. IEEE Signal Processing Magazine, 24(4):118–120, 2007.
+[3] G. Berkooz, P. Holmes, and J. L. Lumley. The proper orthogonal decomposition in the analysis of turbulent flows.
+Annual Review of Fluid Mechanics, 23:539–575, 1993.
+[4] Josh Bongard and Hod Lipson. Automated reverse engineering of nonlinear dynamical systems. Proceedings of the
+National Academy of Sciences, 104(24):9943–9948, 2007.
+[5] S. L. Brunton and B. R. Noack. Closed-loop turbulence control: Progress and challenges. Applied Mechanics Reviews,
+67:050801–1–050801–48, 2015.
+[6] S. L. Brunton, J. H. Tu, I. Bright, and J. N. Kutz. Compressive sensing and low-rank libraries for classification of
+bifurcation regimes in nonlinear dynamical systems. SIAM Journal on Applied Dynamical Systems, 13(4):1716–1732,
+2014.
+[7] E. J. Candès. Compressive sensing. Proc. International Congress of Mathematics, 2006.
+[8] E. J. Candès, J. Romberg, and T. Tao. Robust uncertainty principles: exact signal reconstruction from highly
+incomplete frequency information. IEEE Transactions on Information Theory, 52(2):489–509, 2006.
+[9] E. J. Candès, J. Romberg, and T. Tao. Stable signal recovery from incomplete and inaccurate measurements. Communications in Pure and Applied Mathematics, 59(8):1207–1223, 2006.
+[10] Rick Chartrand. Numerical differentiation of noisy, nonsmooth data. ISRN Applied Mathematics, 2011, 2011.
+[11] T. Colonius and K. Taira. A fast immersed boundary method using a nullspace approach and multi-domain farfield boundary conditions. Computer Methods in Applied Mechanics and Engineering, 197:2131–2146, 2008.
+[12] D. L. Donoho. Compressed sensing. IEEETrans.InformationTheory, 52(4):1289–1306, 2006.
+√
+[13] M. Gavish and D. L. Donoho. The optimal hard threshold for singular values is 4/ 3. ArXiv e-prints, 2014.
+[14] Trevor Hastie, Robert Tibshirani, Jerome Friedman, T Hastie, J Friedman, and R Tibshirani. The elements of statistical
+learning, volume 2. Springer, 2009.
+[15] P. Holmes and J. Guckenheimer. Nonlinearoscillations,dynamicalsystems,andbifurcations of vector fields, volume 42 of
+Applied Mathematical Sciences. Springer-Verlag, Berlin, 1983.
+[16] P. J. Holmes, J. L. Lumley, G. Berkooz, and C. W. Rowley. Turbulence, coherent structures, dynamical systems and
+symmetry. Cambridge Monographs in Mechanics. Cambridge University Press, Cambridge, England, 2nd edition,
+2012.
+[17] C. P. Jackson. A finite-element study of the onset of vortex shedding in flow past variously shaped bodies. Journal
+of Fluid Mechanics, 182:23–45, 1987.
+[18] Gareth James, Daniela Witten, Trevor Hastie, and Robert Tibshirani. An introduction to statistical learning. Springer,
+2013.
+[19] MI Jordan and TM Mitchell. Machine learning: Trends, perspectives, and prospects. Science, 349(6245):255–260,
+2015.
+[20] I. G. Kevrekidis, C. W. Gear, J. M. Hyman, P. G. Kevrekidis, O. Runborg, and C. Theodoropoulos. Equationfree, coarse-grained multiscale computation: Enabling microscopic simulators to perform system-level analysis.
+Communications in Mathematical Science, 1(4):715–762, 2003.
+[21] Muin J Khoury and John PA Ioannidis. Medicine. big data meets public health. Science, 346(6213):1054–1055, 2014.
+[22] J. R Koza. Genetic programming: on the programming of computers by means of natural selection, volume 1. MIT press,
+1992.
+[23] L. Ljung. System Identification: Theory for the User. Prentice Hall, 1999.
+[24] Edward N Lorenz. Deterministic nonperiodic flow. J. Atmos. Sciences, 20(2):130–141, 1963.
+[25] Alan Mackey, Hayden Schaeffer, and Stanley Osher. On the compressive spectral method. Multiscale Modeling
+&amp; Simulation, 12(4):1800–1827, 2014.
+[26] Andrew J Majda, Christian Franzke, and Daan Crommelin. Normal forms for reduced stochastic climate models.
+Proceedings of the National Academy of Sciences, 106(10):3649–3653, 2009.
+[27] Andrew J Majda and John Harlim. Information flow between subspaces of complex dynamical systems. Proceedings of the National Academy of Sciences, 104(23):9558–9563, 2007.
+[28] Jerrold E Marsden and Marjorie McCracken. The Hopf bifurcation and its applications, volume 19. Springer-Verlag,
+1976.
+[29] Vivien Marx. Biology: The big challenges of big data. Nature, 498(7453):255–260, 2013.
+
+19
+
+[30] Igor Mezic. Analysis of fluid flows via spectral properties of the koopman operator. Annual Review of Fluid
+Mechanics, 45:357–378, 2013.
+[31] B. R. Noack, K. Afanasiev, M. Morzynski, G. Tadmor, and F. Thiele. A hierarchy of low-dimensional models for
+the transient and post-transient cylinder wake. Journal of Fluid Mechanics, 497:335–363, 2003.
+[32] DJ Olinger and KR Sreenivasan. Nonlinear dynamics of the wake of an oscillating cylinder. Physical review letters,
+60(9):797, 1988.
+[33] Vidvuds Ozoliņš, Rongjie Lai, Russel Caflisch, and Stanley Osher. Compressed modes for variational problems in
+mathematics and physics. Proceedings of the National Academy of Sciences, 110(46):18368–18373, 2013.
+[34] V. Parezanovic, J.-C. Laurentie, T. Duriez, C. Fourment, J. Delville, J.-P. Bonnet, L. Cordier, B. R. Noack, M. Segond,
+M. Abel, T. Shaqarin, and S. L. Brunton. Mixing layer manipulation experiment – from periodic forcing to machine
+learning closed-loop control. Journal Flow Turbulence and Combustion, 94(1):155–173, 2015.
+[35] J. L. Proctor, S. L. Brunton, B. W. Brunton, and J. N. Kutz. Exploiting sparsity and equation-free architectures in
+complex systems (invited review). The European Physical Journal Special Topics, 223(13):2665–2684, 2014.
+[36] C. W. Rowley, I. Mezić, S. Bagheri, P. Schlatter, and D.S. Henningson. Spectral analysis of nonlinear flows. J. Fluid
+Mech., 645:115–127, 2009.
+[37] D. Ruelle and F. Takens. On the nature of turbulence. Communications in Mathematical Physics, 20:167–192, 1971.
+[38] H. Schaeffer, R. Caflisch, C. D. Hauck, and S. Osher. Sparse dynamics for partial differential equations. Proceedings
+of the National Academy of Sciences USA, 110(17):6634–6639, 2013.
+[39] P. J. Schmid. Dynamic mode decomposition of numerical and experimental data. Journal of Fluid Mechanics, 656:5–
+28, August 2010.
+[40] Michael Schmidt and Hod Lipson. Distilling free-form natural laws from experimental data. Science, 324(5923):81–
+85, 2009.
+[41] K. Taira and T. Colonius. The immersed boundary method: a projection approach. Journal of Computational Physics,
+225(2):2118–2137, 2007.
+[42] R. Tibshirani. Regression shrinkage and selection via the lasso. J. of the Royal Statistical Society B, pages 267–288,
+1996.
+[43] J. A. Tropp and A. C. Gilbert. Signal recovery from random measurements via orthogonal matching pursuit. IEEE
+Transactions on Information Theory, 53(12):4655–4666, 2007.
+[44] J. Wright, A. Yang, A. Ganesh, S. Sastry, and Y. Ma. Robust face recognition via sparse representation. IEEE Trans.
+on Pattern Analysis and Machine Intelligence, 31(2):210–227, 2009.
+[45] Z. Zebib. Stability of viscous flow past a circular cylinder. Journal of Engineering Mathematics, 21:155–165, 1987.
+
+20
+
+Appendix
+Table 1: Damped harmonic oscillator with linear terms.
+’’
+’1’
+’x’
+’y’
+’xx’
+’xy’
+’yy’
+’xxx’
+’xxy’
+’xyy’
+’yyy’
+’xxxx’
+’xxxy’
+’xxyy’
+’xyyy’
+’yyyy’
+’xxxxx’
+’xxxxy’
+’xxxyy’
+’xxyyy’
+’xyyyy’
+’yyyyy’
+
+’xdot’
+[
+0]
+[-0.1015]
+[ 2.0027]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’ydot’
+[
+0]
+[-1.9990]
+[-0.0994]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+21
+
+Table 2: Damped harmonic oscillator with cubic nonlinearity.
+’’
+’1’
+’x’
+’y’
+’xx’
+’xy’
+’yy’
+’xxx’
+’xxy’
+’xyy’
+’yyy’
+’xxxx’
+’xxxy’
+’xxyy’
+’xyyy’
+’yyyy’
+’xxxxx’
+’xxxxy’
+’xxxyy’
+’xxyyy’
+’xyyyy’
+’yyyyy’
+
+’xdot’
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[-0.0996]
+[
+0]
+[
+0]
+[ 1.9970]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’ydot’
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[-1.9994]
+[
+0]
+[
+0]
+[-0.0979]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+Table 3: Three-dimensional linear system.
+’’
+’1’
+’x’
+’y’
+’z’
+’xx’
+’xy’
+’xz’
+’yy’
+’yz’
+’zz’
+
+’xdot’
+[
+0]
+[-0.0996]
+[ 2.0005]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’ydot’
+[
+0]
+[-1.9997]
+[-0.0994]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’zdot’
+[
+0]
+[
+0]
+[
+0]
+[-0.3003]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+22
+
+Table 4: Lorenz system identified using sparse representation with η = 1.0.
+’’
+’1’
+’x’
+’y’
+’z’
+’xx’
+’xy’
+’xz’
+’yy’
+’yz’
+’zz’
+’xxx’
+’xxy’
+’xxz’
+’xyy’
+’xyz’
+’xzz’
+’yyy’
+’yyz’
+’yzz’
+’zzz’
+’xxxx’
+’xxxy’
+’xxxz’
+’xxyy’
+’xxyz’
+’xxzz’
+’xyyy’
+’xyyz’
+’xyzz’
+’xzzz’
+’yyyy’
+’yyyz’
+’yyzz’
+’yzzz’
+’zzzz’
+’xxxxx’
+’xxxxy’
+’xxxxz’
+’xxxyy’
+’xxxyz’
+’xxxzz’
+’xxyyy’
+’xxyyz’
+’xxyzz’
+’xxzzz’
+’xyyyy’
+’xyyyz’
+’xyyzz’
+’xyzzz’
+’xzzzz’
+’yyyyy’
+’yyyyz’
+’yyyzz’
+’yyzzz’
+’yzzzz’
+’zzzzz’
+
+’xdot’
+[
+0]
+[-9.9996]
+[ 9.9998]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’ydot’
+[
+0]
+[27.9980]
+[-0.9997]
+[
+0]
+[
+0]
+[
+0]
+[-0.9999]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’zdot’
+[
+0]
+[
+0]
+[
+0]
+[-2.6665]
+[
+0]
+[ 1.0000]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+23
+
+Table 5: Dynamics of cylinder wake modes using sparse representation. Notice that quadratic terms are
+identified.
+
+’’
+’1’
+’x’
+’y’
+’z’
+’xx’
+’xy’
+’xz’
+’yy’
+’yz’
+’zz’
+’xxx’
+’xxy’
+’xxz’
+’xyy’
+’xyz’
+’xzz’
+’yyy’
+’yyz’
+’yzz’
+’zzz’
+’xxxx’
+’xxxy’
+’xxxz’
+’xxyy’
+’xxyz’
+’xxzz’
+’xyyy’
+’xyyz’
+’xyzz’
+’xzzz’
+’yyyy’
+’yyyz’
+’yyzz’
+’yzzz’
+’zzzz’
+’xxxxx’
+’xxxxy’
+’xxxxz’
+’xxxyy’
+’xxxyz’
+’xxxzz’
+’xxyyy’
+’xxyyz’
+’xxyzz’
+’xxzzz’
+’xyyyy’
+’xyyyz’
+’xyyzz’
+’xyzzz’
+’xzzzz’
+’yyyyy’
+’yyyyz’
+’yyyzz’
+’yyzzz’
+’yzzzz’
+’zzzzz’
+
+’xdot’
+[
+-0.1225]
+[
+-0.0092]
+[
+-1.0224]
+[-9.2203e-04]
+[
+0]
+[
+0]
+[ 2.1261e-04]
+[
+0]
+[
+-0.0019]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’ydot’
+[
+-0.0569]
+[
+1.0347]
+[
+0.0047]
+[-4.4932e-04]
+[
+0]
+[
+0]
+[
+0.0022]
+[
+0]
+[
+-0.0018]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+24
+
+’zdot’
+[
+-20.8461]
+[-4.6476e-04]
+[ 2.4057e-04]
+[
+-0.2968]
+[
+0.0011]
+[
+0]
+[
+0]
+[ 8.6432e-04]
+[
+0]
+[
+-0.0010]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+Table 6: Logistic map identified using sparse representation.
+’’
+’1’
+’x’
+’r’
+’xx’
+’xr’
+’rr’
+’xxx’
+’xxr’
+’xrr’
+’rrr’
+’xxxx’
+’xxxr’
+’xxrr’
+’xrrr’
+’rrrr’
+’xxxxx’
+’xxxxr’
+’xxxrr’
+’xxrrr’
+’xrrrr’
+’rrrrr’
+
+’x_{k+1}’
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[ 0.9993]
+[
+0]
+[
+0]
+[-0.9989]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’r_{k+1}’
+[
+0]
+[
+0]
+[1.0000]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+25
+
+Table 7: Hopf normal form identified using sparse representation. Here u represents the bifurcation parameter µ.
+’’
+’1’
+’x’
+’y’
+’u’
+’xx’
+’xy’
+’xu’
+’yy’
+’yu’
+’uu’
+’xxx’
+’xxy’
+’xxu’
+’xyy’
+’xyu’
+’xuu’
+’yyy’
+’yyu’
+’yuu’
+’uuu’
+’xxxx’
+’xxxy’
+’xxxu’
+’xxyy’
+’xxyu’
+’xxuu’
+’xyyy’
+’xyyu’
+’xyuu’
+’xuuu’
+’yyyy’
+’yyyu’
+’yyuu’
+’yuuu’
+’uuuu’
+’xxxxx’
+’xxxxy’
+’xxxxu’
+’xxxyy’
+’xxxyu’
+’xxxuu’
+’xxyyy’
+’xxyyu’
+’xxyuu’
+’xxuuu’
+’xyyyy’
+’xyyyu’
+’xyyuu’
+’xyuuu’
+’xuuuu’
+’yyyyy’
+’yyyyu’
+’yyyuu’
+’yyuuu’
+’yuuuu’
+’uuuuu’
+
+’xdot’
+[
+0]
+[
+0]
+[-0.9920]
+[
+0]
+[
+0]
+[
+0]
+[ 0.9269]
+[
+0]
+[
+0]
+[
+0]
+[-0.9208]
+[
+0]
+[
+0]
+[-0.9211]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’ydot’
+[
+0]
+[ 0.9914]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[ 0.9294]
+[
+0]
+[
+0]
+[-0.9244]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[-0.9252]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+’udot’
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+[
+0]
+
+26
+

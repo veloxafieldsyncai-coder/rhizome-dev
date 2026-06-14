@@ -1,0 +1,2029 @@
+Silviu-Marian Udrescu1 , Andrew Tan1 , Jiahai Feng1 , Orisvaldo Neto1 , Tailin Wu2 & Max Tegmark1,3
+1
+MIT Dept. of Physics and Institute for AI & Fundamental Interactions, Cambridge, MA, USA
+2
+Stanford Dept. of Computer Science, Palo Alto, CA, USA
+3
+Theiss Research, La Jolla, CA, USA
+1
+{sudrescu, aktan, fjiahai, oris,tegmark}@mit.edu, 2 tailin@cs.stanford.edu
+
+Abstract
+We present an improved method for symbolic regression that seeks to fit data to
+formulas that are Pareto-optimal, in the sense of having the best accuracy for a given
+complexity. It improves on the previous state-of-the-art by typically being orders
+of magnitude more robust toward noise and bad data, and also by discovering many
+formulas that stumped previous methods. We develop a method for discovering
+generalized symmetries (arbitrary modularity in the computational graph of a
+formula) from gradient properties of a neural network fit. We use normalizing
+flows to generalize our symbolic regression method to probability distributions
+from which we only have samples, and employ statistical hypothesis testing to
+accelerate robust brute-force search.
+
+1
+
+Introduction
+1
+
+30
+25
+
+Relative r.m.s. error
+
+Inacuraccy [bits/data point]
+
+arXiv:2006.10782v2 [cs.LG] 16 Dec 2020
+
+AI Feynman 2.0: Pareto-optimal symbolic regression
+exploiting graph modularity
+
+10- 3
+
+20
+15
+
+10- 6
+
+10
+5
+0
+0
+
+5
+
+10
+
+15
+
+20
+
+Complexity [bits]
+
+25
+
+30
+
+10- 9
+
+Figure 1: Our symbolic regression of data on how kinetic energy depends on mass, velocity and the
+speed of light discovers a Pareto-frontier of four formulas that are each the most accurate given their
+complexity. Convex corners reveal particularly useful formulas, in this case Einstein’s formula and
+the classical approximation mv 2 /2.
+A central challenge in science is symbolic regression: discovering a symbolic expression that provides
+a simple yet accurate fit to a given data set. More specifically, we are given a table of numbers,
+whose rows are of the form {x1 , ..., xn , y} where y = f (x1 , ..., xn ), and our task is to discover the
+correct symbolic expression (composing mathematical functions from a user-provided set) for the
+unknown mystery function f , optionally including the complication of noise and outliers. Science
+34th Conference on Neural Information Processing Systems (NeurIPS 2020), Vancouver, Canada.
+
+aside, symbolic regression has the potential to replace some inscrutable black-box neural networks
+by simple yet accurate symbolic approximations, helping with the timely goal of making high-impact
+AI systems more interpretable and reliable [1–5].
+Symbolic regression is difficult because of the exponentially large combinatorial space of symbolic
+expressions. Traditionally, it has relied on human intuition, leading to the discovery of some
+of the most famous formulas in science. More recently, there has been great progress toward
+fully automating the process [6–26], and open-source software now exists that can discover quite
+complex physics equations by combining neural networks with techniques inspired by physics and
+information theory [25]. Although [25] achieved state-of-the-art performance using a neural network
+approximation of the unknown function to discover simplifying function properties, it did so in
+an unprincipled and ad hoc way that we replace by a general, principled and much more effective
+method, incorporating four main contributions:
+1. We recursively exploit modularity in the function’s computational graph. While [25]
+discovered merely two types of graph modularity (symmetry and separability) involving
+merely four particular bivariate functions (+, −, × and ÷), our method has the potential
+to discover any graph modularity involving any functions of n = 2, 3, ... variables, by
+examining gradients of the neural network fit.
+2. Instead of concluding that a candidate function or graph decomposition is good because
+the fitting accuracy exceeds arbitrary hyperparameter-determined thresholds, we eliminate
+these hyperparameters and use a Pareto-frontier (of description-length complexity versus
+inaccuracy) to prune our search over candidate expressions by discarding all candidates not
+on the frontier, improving robustness to noise and bad data.
+3. Instead of simply rejecting formula candidates using L∞ -norm (rejecting as soon as the
+error for a single data point crosses a threshold), we reject using statistical hypothesis testing,
+further improving robustness.
+4. We use normalizing flows to enable symbolic regression of probability distributions from
+samples.
+This enables more complex formulas to be discovered and improving noise robustness by 1-3 orders
+of magnitude. We describe our symbolic regression algorithm (which is publicly available1 ) in
+Section 2 and test it with numerical experiments in Section 3.
+
+2
+
+Method
+
+Our symbolic regression algorithm uses a divide-and-conquer approach as in [25]. We directly solve
+a mystery in two base cases: if the mystery function f (x1 , ..., xn ) is a low-order polynomial or if it is
+simple enough to be discovered by brute-force search. Otherwise, we recursively try the strategies
+that we will now describe for replacing it by one or more simpler mysteries, ideally with fewer input
+variables.
+2.1
+
+Leveraging graph modularity against the curse of dimensionality
+
+When we define and evaluate a mathematical function, we typically represent it as composed of some
+basis set S of simpler functions. As illustrated in Figure 2 (middle panel), this representation can
+be specified as a graph whose nodes contain elements of S. The most popular basis functions in the
+scientific literature tend to be functions of two variables (such as + or ×), one variable (such as sin
+or log) or no variables (constants such as 2 or π). For many functions of scientific interest, this graph
+is modular in the sense that it can be partitioned in terms of functions with fewer input variables, as
+in Figure 2 (right panel).
+A key strategy of our symbolic regression algorithm is to recursively discover such modularity, thereby
+reverse-engineering the computational graph of a mystery function, starting with no information about
+it other than an input-output data table. This is useful because there are exponentially many ways to
+combine n basis functions into a module, making it extremely slow and difficult for brute-force or
+1
+
+Our code is can be installed by typing pip install aifeynman and is also available at https://ai-feynman.
+readthedocs.io.
+
+2
+
+f
+
+f
+
+f
+
+×
+^
+
+=
+
+1
+–
+
+x
+
+y
+
+z
+
+cos
+
++
+^
+
+2
+
+=
+
+h
+
+invert
+
+x
+
+y
+
+z
+
+x
+
+y
+
+z
+
+Figure 2: All functions can be represented as tree graphs whose nodes represent a set of basic
+functions (middle panel). Using a neural network trained to fit a mystery function (left panel), our
+algorithm seeks a decomposition of this function into others with fewer input variables (right panel),
+in this case of the form f (x, y, z) = g[h(x, y), z] .
+Simple symmetry (scaling, etc.)
+
+Additive separability
+
+Compositionality
+
+=
+
+=
+
+=
+
+or ×, +, –
+
+÷
+
++
+
+Generalized symmetry
+
+Multiplicative separability
+
+Generalized additivity
+
+=
+
+=
+
+=
+
+×
+
++
+
+Figure 3: Examples of graph modularity that our algorithm can auto-discover. Lines denote realvalued variables and ovals denote functions, with larger ones being more complex.
+
+genetic algorithms to discover the correct function when n is large. Our divide-and-conquer approach
+of first breaking the function into smaller modules with smaller n that can be solved separately thus
+greatly accelerates the solution. We implement this modularity discovery algorithm in two steps:
+1. Use the user-provided data table to train a neural network fNN (x) that accurately approximates the mystery function f (x).
+2. Perform numerical experiments on fNN (x) to discover graph modularity.
+Specifically, we test for the six types of graph modularity illustrated in Figure 3 and listed in
+Table 1, and choose between the discovered candidates as described in Section 2.2. Our method
+for discovering separability is described in [25]. As we will see below, all our other types of graph
+modularity (compositionality, symmetry and generalized additivity) can be revealed by ∇f , the
+gradient of our mystery function f .
+Compositionality Let us first consider the case of compositionality (Figure 3, top right), where
+f (x) = g(h(x)) and h is a scalar function simpler than f in the sense of being expressible with a
+smaller graph as in Figure 3. By the chain rule, we have
+∇f (x) = g 0 (h(x))∇h(x),
+3
+
+c = ±∇h,
+c
+so ∇f
+
+(1)
+
+Table 1: Simplification strategies
+Name
+Negativity
+
+Property
+f (x1 , x2 , ...) < 0
+
+Action
+Solve for g ≡ −f
+
+Positivity
+
+f (x1 , x2 , ...) > 0
+
+Solve for g ≡ ln f
+
+Additive
+separability
+
+f (x1 , ..., xk , xk+1 , ..., xn ) =
+g(x1 , ..., xk ) + h(xk+1 , ..., xn )
+
+Solve for g & h
+
+Multiplicative
+separability
+
+f (x1 , ..., xk , xk+1 , ..., xn ) =
+g(x1 , ..., xk )h(xk+1 , ..., xn )
+
+Solve for g & h
+
+Simple symmetry
+
+f (x1 , x2 , ...) = g(x1
+
+Compositionality
+
+f (x1 , ..., xn ) = g(h(x1 , ..., xn )), h simpler than f
+
+Find h with ∇h ∝ ∇f
+
+Generalized
+symmetry
+
+f (x1 , ..., xk , xk+1 , ..., xn ) =
+g[h(x1 , ..., xk ), xk+1 , ..., xn ]
+
+Find h satisfying
+∂f
+∂h
+∂xi ∝ ∂xi , i = 1, ..., k
+
+Generalized
+additivity
+
+f (x1 , x2 ) = F [g(x1 ) + h(x2 )]
+
+Solve for F , g & h
+
+Zero-snap
+
+f˜ has numerical parameters p
+
+Replace pi by 0
+
+Integer snap
+
+f˜ has numerical parameters p
+
+Round pi to integer
+
+Rational snap
+
+f˜ has numerical parameters p
+
+Round pi to fraction
+
+Reoptimize
+
+f˜ has numerical parameters p
+
+Reoptimize p to
+minimize inaccuracy
+
+x2 , ...),
+
+∈ {+, −, ×, /}
+
+Solve for g
+
+c ≡ ∇f /|∇f |, etc. This means that if we can discover a function h
+where hats denote unit vectors: ∇f
+whose gradient is proportional to that of f (which we will describe a process for in Section 2.2), then
+we can simply replace the variables x in the original mystery data table by the single variable h(x)
+and recursively apply our AI Feynman algorithm to the new one-dimensional symbolic regression
+problem of discovering g(h).
+Generalized symmetry Let us now turn to generalized symmetry (Figure 3, bottom left), where
+k of the n arguments enter only via some scalar function h of them. Specifically, we say that an
+f has generalized symmetry if the n components of the vector x ∈ Rn can be split into groups
+of k and n − k components (which we denote by the vectors x0 ∈ Rk and x00 ∈ Rn−k ) such that
+f (x) = f (x0 , x00 ) = g[h(x0 ), x00 ] for some function g. By the chain rule, we have
+∇x0 f (x0 , x00 ) = g1 [h(x0 ), x00 ]∇h(x0 ),
+
+so
+
+c
+[
+∇
+x0 f = ±∇h,
+
+(2)
+
+0 00
+d
+where g1 denotes the derivative of g with respect to its first argument. This means that ∇
+x0 f (x , x ) is
+independent of x00 , which it would not be for a generic function f . x00 -independence of the normalized
+0 00
+d
+b (x0 , x00 ) ≡ ∇
+gradients v
+x0 f (x , x ) thus provides a smoking gun signature of generalized symmetry.
+Whereas our compositionality discovery above requires discovering an explicit function h, we can
+discover generalized symmetry without knowing h, thus only performing the time-consuming task of
+searching for an h satisfying equation (2) after determining that a solution exists. The Supplementary
+b (x0 , x00 ).
+Material details how we numerically test for x00 -independence of v
+
+Generalized additivity If f is a function of two variables, then we also test for generalized
+additivity (Figure 3, bottom right), where f (x1 , x2 ) = F [g(x1 ) + h(x2 )]. If we define the function
+s(x1 , x2 ) ≡
+
+∂f /∂x1
+,
+∂f /∂x2
+
+then s(x1 , x2 ) =
+
+g 0 (x1 )
+h0 (x2 )
+
+(3)
+
+if f satisfies the generalized additivity property. In other words, we simply need to test if s is
+of the multiplicatively separable form s(x1 , x2 ) = a(x1 )b(x2 ), and we do this using a variant of
+the separability test described in [25]. The Supplementary Material details how we perform this
+separability test numerically.
+4
+
+2.2
+
+Object
+
+Table 2: Complexity definitions
+Symbol Description length Ld
+
+Natural number
+Integer
+Rational number
+Real number
+Parameter vector
+Parametrized function
+
+n
+m
+m/n
+r
+p
+f (x; p)
+
+log2 n
+log2 (1 + |m|)
+Ld (m) + Ld (n) = log2 [(1 + |m|)n] 
+r
+1
+2
+log
+P + ε , log+(x) ≡ 2 log2 1 + x
+i Ld (pi )
+Ld (p) + k log2 n; n basis functions appear k times
+
+Robustness through recursive Pareto-optimality
+
+As illustrated in Figure 1, the goal of our symbolic regression of a data set is to approximate f (x)
+by functions f˜(x) that are not only accurate, but also simple, in the spirit of Occam’s razor. As
+in [10], we seek functions that are Pareto-optimal in the sense of there being no other function that is
+both simpler and more accurate. We will adopt an information-theoretical approach and use bits of
+information to measure lack of both accuracy and simplicity.
+For accuracy, we wish the vector ε of prediction errors εi ≡ yi − f˜(xi ) to be small. We quantify this
+not by the mean-squared error hε2i i or max-error max |εi | as in [10, 25], but by the MEDL, the mean
+error-description-length hLd (εi )i defined in Table 2. As argued in [27] and illustrated in Figure 4,
+this improves robustness to outliers. We analogously quantify complexity by the description length
+Ld defined as in [27], summarized in Table 2.
+Ld can be viewed as a crude but computationally convenient approximation of the number of bits
+needed to describe each object, made differentiable where possible. We choose the precision floor
+ ≡ 2−30 ∼ 10−9 . For function complexity, both input variables and mathematical functions
+(e.g., cos and +) count toward n and k. For example, the classical kinetic energy formula has
+Ld (“m × v × v/200 ) = Ld (2) + k log2 n = log2 3 + 6 log2 4 ≈ 13.6 bits, since the formula contains
+n = 4 basis functions (m, v, × and /) used k = 6 times.
+We wish to make the symbolic regression implementation of [25] more robust; it sometimes fails
+to discover the correct expression because of noise in the data or inaccuracies introduced by the
+neural network fitting. The neural network accuracy may vary strongly with x, becoming quite
+poor in domains with little training data or when the network is forced to extrapolate rather than
+interpolate, and we desire a regression method robust to such outliers. We expect our insistence on
+Pareto-optimal functions in the information plane of Figure 1 to increase robustness, both because
+hLd (εi )i is robust (Figure 4) and because noise and systematic errors are unlikely to be predictable by
+a simple mathematical formula with small Ld . More broadly, minimization of total exact description
+length (which Ld crudely approximates) provably avoids the overfitting problem that plagues many
+alternative machine-learning strategies [28–30].
+Speedup by recursive Pareto frontier composition When recursively symbolically regressing
+various modules (see Figure 2), we end up with a Pareto frontier of candidate functions
+Q for each one.
+If there are ni functions on the ith frontier, then combining them all would produce i ni candidates
+f˜(x) for the original function f (x). We speed up our algorithm by Pareto-pruning after each merge
+step: whenever two modules are combined (via composition or multiplication, say), the resulting
+n1 n2 functions are pruned by removing all functions that are Pareto-dominated by another function
+that is both simpler and more accurate. Pruning models on the Pareto frontier significantly reduces the
+number of models that need to be evaluated, since in typical scenarios, the number of Pareto-optimal
+points grows only logarithmically with the total number of points.
+Robust speedup of brute-force graph search with hypothesis testing Our recursive reduction
+of regression mysteries into simpler ones terminates at the base case when the mystery function
+has only one variable and cannot be further modularized. As in [25], we subject these (and also
+all multivariate modules) to two solution strategies, polynomial fitting up to some degree (4 by
+default) and brute-force search, and then add all candidates functions to the Pareto plane and prune
+as above. The brute-force search would, if run forever, try all symbolic expressions by looping
+5
+
+15
+
+1.5
+
+DL (ε=0.0
+
+0001)
+
+10
+
+1.0
+
+DL (ε=0.0
+
+ED
+
+Loss
+
+M
+
+DL (ε=0.0
+1)
+
+0.5
+
+L
+
+5
+
+SE
+
+M
+
+01)
+
+DL (ε=0.1)
+0
+
+MSE
+0.0
+
+0.5
+
+1.0
+
+1.5
+
+a
+
+2.0
+
+0.0
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+3
+
+ax
+Figure 4: When fitting a function (the right panel shows the example ex/b
+) to data with outliers,
+−1
+minimizing mean-squared-error (MSE) biases the curve toward the outliers (here finding a ≈ 0.89,
+b ≈ 1.056), whereas minimizing mean error description length (MEDL) ignores the outliers and
+recovers the correct answer a = b = 1. Left panel compares MSE and MEDL loss functions for
+b = 1.
+
+over ever-more-complex graphs (the middle panel of Figure 2 shows an example) and over function
+options for each node.
+Our brute-force computation of the Pareto frontier simply tries all functions fk (x) (k = 1, 2...) in
+order of increasing complexity Ld (fk ) and keeps only those with lower mean error-description-length
+PN
+dk ≡ N1 i=1 dki than the previous record holder, where dki ≡ Ld [yi − fk (xi )]. When instead
+c as in Section 2.1, we define dki ≡ Ld [1 − |ŷi · ∇f
+dk (xi )|] to
+fitting normalized gradient vectors ∇f
+handle the sign ambiguity. The bad news is that computing dk exactly is slow, requiring evaluation
+of fk (xi ) for all N data points xi . The good news is that this is usually unnecessary, since for the
+vast majority of all candidate functions, it becomes obvious that they provide a poor fit after trying
+merely a handful of data points. We therefore accelerate the search via the following procedure.
+Before starting the loop over candidate functions, we sort the data points in random order to be
+able to interpret the numbers dki as random samples from a probability distribution whose mean is
+the sought-for dk and whose standard deviation is σk . Let dk∗ and σk∗ denote the corresponding
+quantities that were computed for the previous best-fit function we added to the Pareto frontier. We
+make the simplifying approximations that σk = σk∗ P
+and that all errors are uncorrelated, so that the
+m
+1
+loss estimate from the first m data points d¯km ≡ m
+i=1 dki has mean dk and standard deviation
+√
+σk∗ / m. We now test our candidate function fi on one data point at a time and reject it as soon as
+z > ν,
+
+where
+
+z≡
+
+√
+
+m
+
+d¯km − dk∗
+,
+σk∗
+
+(4)
+
+where ν is a hyperparameter that we can interpret as the “number of sigmas" we require to rule out
+a candidate function as viable when its average error exceeds the previous record holder. We find
+that ν = 10 usually works well, generically requiring no more than a handful of evaluations m per
+candidate function asymptotically. We can further increase robustness by increasing ν at the price of
+longer runtime.
+Speedup by greedy search of simplification options We do not a priori know which of the
+modular decompositions from Figure 3 are most promising, and recursively trying all combinations
+of them would involve trying exponentially many options. We therefore accelerate our algorithm
+with a greedy strategy where at each step we compare the decomposition in a unified way and try
+only the most accurate one — our runtime thus grows roughly linearly with n, the number of input
+variables. f (x) stays constant along constant-h curves for generalized symmetry, simple symmetry
+(where h(x, y) = x + y, x − y, xy or x/y) and generalized additivity (where h(x, y) = a(x) + b(y)).
+We thus test the accuracy of all such h-candidates by starting at a datapoint xi and computing an error
+i ≡ f (x̃i ) − f (xi ) for some x̃i satisfying h(x̃i ) = h(xi ). For additive and multiplicative separability,
+we follow [25] by examining a rectangle in parameter space and predicting f at the fourth corner
+from the other three, defining i as the mismatch. The supplementary material details how our test
+points are chosen.
+6
+
+Figure 5: A normalizing flow g maps samples from a probability distribution f (right) into a normal
+distribution (left), enabling an estimate (middle) of f , here illustrated for the n = 2, l = 1, m = 0
+hydrogen orbital from Table 5.
+
+After this greedy recursive process has terminated, we further improve the Pareto frontier in two ways.
+We first add models where rational numbers are replaced by reals and optimized by gradient descent
+to fit the data. We then add models with zero-snap, integer-snap and rational-snap from Table 1
+applied to all real-valued parameters as described in [27], pruning all Pareto-dominated models after
+each step. For example, if there are 3 real-valued parameters, integer-snap generates 3 new models
+where the 1, 2 and 3 parameters closest to integers get rounded, respectively.
+2.3
+
+Leveraging normalizing flows to symbolic regress probability distributions
+
+An important but more difficult symbolic regression problem is when the unknown function f (x)
+is a probability distribution from which we have random samples xi rather than direct evaluations
+yi = f (xi ). We tackle this by adding preceding the regression by a step that estimates f (x). For this
+step, we use the popular normalizing flow technique [31–35], training an invertible neural network
+mapping x 7→ x0 ≡ g(x) such that x0 has a multivariate normal distribution n(x0 ) as illustrated in
+Figure 5. We then obtain our estimator fNN (x) = n[g(x)]|J|, where J is the Jacobian of g.
+We find rational-quadratic neural spline flows (RQ-NSF) suitable for relatively low-dimensional
+applications due to their enhanced expressivity. Specifically, we used three steps of the RQ-NSF with
+RQ-NSF (C) coupling layers as described in [34], parametrized by three 16-neuron softplus layers,
+trained for 50, 000 epochs with the Adam optimizer. The learning rate was initialized to 3 × 10−4
+and halved every time the test loss failed to improve for 2500 epochs.
+2.4
+
+Neural Network training
+
+Our neural network approximation fNN of the mystery function f is fully-connected, feed-forward
+neural network with 4 hidden layers of 128, 128, 64 and 64 neurons, respectively, all with tanh
+activation function. We used 80% of the available data the training and the rest for validation. We
+used the r.m.s. error loss function and the Adam optimizer with β-parameters of 0.9 and 0.999. The
+learning rate was initialized to 0.01 and reduced by a factor of 10 whenever the validation loss failed
+to improve for more than 20 epoch, until it reached 10−5 . As mentioned, all our code is available at
+https://ai-feynman.readthedocs.io and by typing “pip install aifeynman".
+
+3
+
+Results
+
+We now turn to quantifying the performance of our method with numerical experiments, comparing
+it with that of [25] which recently exceded the previous state of-the-art performance of [10]. To
+quantify robustness to noise, we add Gaussian noise of standard deviation 10r to yi and determine the
+largest integer r < 0 for which the method successfully discovers the correct mystery function f (x).
+As seen in Table 3, our method solves 73 of 100 baseline problems from the Feynman Symbolic
+Regression Database [25] with r = −1, and is typically 1-3 orders of magnitude more robust than that
+of [25]. Crudely speaking, we found that adding progressively more noise shifted the most accurate
+7
+
+Table 3: Robustness to noise
+Old
+robustness
+
+New robustness
+10− 5
+10− 4
+10− 3
+10− 2
+Total
+
+10− 5
+0
+0
+0
+0
+0
+
+10− 4
+1
+1
+0
+0
+2
+
+10− 3
+2
+3
+5
+0
+10
+
+10− 2
+2
+5
+6
+2
+15
+
+10− 1
+0
+12
+24
+37
+73
+
+Total
+5
+21
+35
+39
+100
+
+Table 4: Test equations exhibiting translational symmetry h = x ± y (T), scaling symmetry h = x/y
+(S), product symmetry h = xy (P), generalized symmetry (G), multiplicative separability (M),
+compositionality (C) and generalized additivity (A).
+Equation
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+
+Symmetries
+
+δ = −5.41 + 4.9 α−β+γ/χ
+3χ
+χ = 0.23 + 14.2 α+β
+3γ
+
+−0.54723748542α
+
+β = 213.80940889
+1−e
+√
+δ = 6.87 + 11 αβγ
+
+−1
+V = R1−1 + R2−1 + R3−1 + R4−1
+I0 cos ωt (Parallel resistors)
+V0
+(RLC
+circuit
+)
+I0 = q
+2
+1
+R2 +(ωL− ωC
+)
+I = q V0 cos ωt 1 2 (RLC circuit)
+R2 +(ωL− ωC )
+2
+x
+V2 = ( R1R+R
+− RxR+R
+)V1 (Wheatstone bridge)
+2
+3
+
+3
+1 +v2 +v3 )/c+v1 v2 v3 /c
+v = c (v
+(Velocity addition)
+1+(v1 v2 +v1 v3 +v2 v3 )/c2
+(v1 +v2 +v3 +v4 )/c+(v2 v3 v4 +v1 v3 v4 +v1 v2 v4 +v1 v2 v3 )/c3
+v = c 1+(v1 v2 +v1 v3 +v1 v4 +v2 v3 +v2 v4 +v3 v4 )/c2 +v1 v2 v3 v4 /c4 (Velocity addition)
+z = (x4 + y 4√
+)1/4 (Lp
+4 -norm)
+p
+√
+√
+√
+w = xyz − z 1 − x2 1 − y 2 − y 1 − x2 1 − z 2 − x 1 − y 2 1 − z 2
+
+√
+
+xy+ 1−x2 −y 2 +x2 y 2
+z= √ 2 √ 2
+y 1−x −x 1−y
+p
+√
+z = y 1 − x2 + x 1 − y 2
+
+TC
+TS
+P
+PGSM
+MG
+MG
+SGMA
+AG
+GA
+AC
+GA
+A
+A
+A
+GMAC
+
+p
+√
+z = xy − 1 − x2 1 − y 2
+a
+r = cot (α/2)+cot
+(Incircle)
+(β/2)
+
+formula straight upward in the Pareto plane (Figure 1) until it no longer provided any accuracy gains
+compared with simpler approximations.
+To quantify the ability of our method to discover more complex equations, we reran it on all 17
+mysteries that [25] tackled and failed to solve. We also tested a dozen new mysteries exhibiting
+various forms of graph modularity (see Table 4) that were all chosen before any of them were tested.
+Allowing at most two hours of runtime, the method of [25] solved 5 of the equations, whereas our new
+method solved them all, as well as four of the outstanding mysteries from [25] (rows 1-4). For these
+first four, our method got the numerical parameters in the right ballpark with rational approximations,
+then discovered their exact values through gradient descent.
+To quantify the ability of our method to discover probability distributions, we tested it on samples
+from the ten distributions in Table 5. As seen in the table, 80% were solved, requiring between 102
+and 105 samples xi . The flows trained in about 20 minutes on one CPU, scaling roughly linearly with
+sample size and number of network weights.
+We discuss common failure modes below. Interestingly, these do not include overfitting, for multiple
+reasons: (1) We early-stop training when the validation loss starts increasing. (2) We avoid using our
+neural network (to guess symbolic functions) outside the domain where it was trained. (3) Overfitting
+noise would generally reduce apparent graph modularity, thus causing failure to discover formulas
+rather than discovery of spurious “overfit” formulas. (4) A key desirable feature of the minimumdescription-length formalism (the information-theoretical inspiration for our method) is that it
+provably avoids overfitting as shown in [28, 30].
+8
+
+Table 5: Probability distributions and number of samples N required to discover them
+Distribution Name
+
+Probability distribution
+
+N
+
+Laplace distribution
+Beta distribution (α = 0.5, β = 0.5)
+
+1 −|x|
+2e
+1 √ 1
+π
+x(1−x)
+4
+
+102
+104
+
+30x (1 − x)
+2
+√2 x2 e−x
+π
+
+1 sin x 2
+
+Beta distribution (α = 5, β = 2)
+Harmonic oscillator (n = 2, mω
+~ = 1)
+Sinc diffraction pattern
+2D normal distribution (correlated)
+2D harmonic oscillator (n = 2, m = 1, mω
+~ = 1)
+Hydrogen orbital (n = 1, l = 0, m = 0)
+Hydrogen orbital (n = 2, l = 1, m = 0)
+Hydrogen orbital (n = 3, l = 1, m = 0)
+
+4
+
+π
+x
+2
+2
+2
+√1 e− 3 (x −xy+y )
+3π
+2 2 −x2 −y 2
+πx e
+1 −2r
+πe
+1 2 −r
+cos2 θ
+16 r e
+2 − 2r
+1 2
+4 − 2r
+e 3 cos2 θ
+729 r
+3
+
+104
+105
+104
+103
+105
+103
+-
+
+Conclusions
+
+We have presented a symbolic regression method that exploits neural networks, graph modularity,
+hypothesis testing and normalizing flows, and released it at https://ai-feynman.readthedocs.
+io. It improves state-of-the-art performance both by being more robust towards noise and by solving
+harder problems, including symbolic density estimation.
+Despite these advances, numerous equations remained unsolved, motivating further work. Here are
+some interesting failure modes we identified. Some cases failed because the form of the equation
+precluded our method from breaking it into small enough pieces. For example, for the equation
+
+
+α3 e−α cos α sin α cos α(sin α)2 − 1 (β − 5),
+our algorithm discovered the multiplicative separability into terms including only α and only β.
+However, the remaining α-term was too complicated to be solved in a reasonable amount of time by
+the brute force code, and none of the graph modularity methods apply because they only help for
+functions of more than one variable. For other equations, our method fails but not irreparably. For
+example, for the function
+22 − 4.2 [cos α − tan β] tanh γ/ sin χ,
+our code is able to discover that γ and χ can be separated from the rest of the equation. However,
+given that we allow the brute force code to run for only a minute for each iteration, the expression
+tanh γ is not discovered, mainly because we did not include tanh as one of the functions used, so the
+2x
+brute force would have to write that as ee2x −1
++1 . By allowing the code to run for longer or using with
+other basis functions (such as tanh), the code could solve this and several other mysteries that we
+reported as failures. Success and failure modes are further discussed in the Supplementary Material.
+There are many obvious ways in which the core ideas of this paper can be extended to further
+improve symbolic regression. For example, gradients can reveal more types of graph modularity
+than the Figure 3 examples that we exploited (e.g. where modules output more than one variable),
+additional simplification strategies can be included in the Pareto-optimal recursion, and flow-based
+regression can be used for regularized density estimation from sparse high-dimensional data. Larger
+and more challenging collections of science-based equations are needed to benchmark and inspire
+improved algorithms. A higher-level direction for improvement is to generalize the problem itself:
+Whereas symbolic regression takes the regression variables as given, discovering novel formulas
+from real-world data typically requires also the pre-regression step of mapping high-dimensional
+data into a low-dimensional latent space whose coordinates are promising candidates for symbolic
+regression; [36] provides a literature review and early steps in this direction.
+Pareto-optimal symbolic regression has the power to not only discover exact formulas, but also
+approximate ones that are useful for being both accurate and simple. The mainstream view is that all
+known science formulas are such approximations. We live in a golden age of research with ever-larger
+datasets produced by both experiments and numerical computations, and we look forward to a future
+when symbolic regression is as ubiquitous as linear regression is today, helping us better understand
+the relations hidden in these datasets.
+9
+
+Acknowledgments and Disclosure of Funding
+The authors with to thank Philip Tegmark for helpful comments, and the Center for Brains, Minds,
+and Machines (CBMM) for hospitality.
+Funding: This work was supported by The Casey and Family Foundation, the Ethics and Governance
+of AI Fund, the Foundational Questions Institute, the Rothberg Family Fund for Cognitive Science
+and the Templeton World Charity Foundation, Inc.
+Competing interests: The authors declare that they have no competing interests.
+Data and materials availability: Data and code have been publicly released at
+https://ai-feynman.readthedocs.io.
+
+Broader Impact
+Who may benefit from this research
+Our research presumably has quite broad impact, since discovery of mathematical patterns in data is
+a central problem across the natural and social sciences. Given the ubiquity of linear regression in
+research, one might expect that there will significant benefits to a broad range of researchers also
+from more general symbolic regression once freely available algorithms get sufficiently good.
+Who may be put at disadvantage from this research
+Although it is possible that some numerical modelers could get their jobs automated away by symbolic
+regression, we suspect that the main effect of our method, and future tools building on it, will instead
+be that these people will simply discover better models than today.
+Risk of bias, failure and other negative outcomes
+Pareto-optimal symbolic regression can be viewed as an extreme form of lossy data compression
+that uncovers the simplest possible model for any given accuracy. To the extent that overfitting can
+exacerbate bias, such model compression is expected to help. Moreover, since our method produces
+closed-form mathematical formulas that have excellent interpretability compared to black-box neural
+networks, they make it easier for humans to interpret the computation and pass judgement on whether
+it embodies unacceptable bias. This interpretability also reduces failure risk.
+Another risk is automation bias, whereby people overly trust a formula from symbolic regression
+when they extrapolate it into an untested domain. This could be exacerbated if symbolic regression
+promotes scientific laziness and enfeeblement, where researchers fit phenomenological models instead
+of doing the work of building models based on first principles. Symbolic regression should inform
+but not replace traditional scientific discovery.
+Although the choice of basis functions biases the discoverable function class, our method is agnostic
+to basis functions as long as they are mostly differentiable.
+The greatest potential risk associated with this work does not stem from it failing but from it succeeding: accelerated progress in symbolic regression, modularity discovery and its parent discipline,
+program synthesis, could hasten the arrival of artificial general intelligence, which some authors have
+argued humanity still lacks the tools to manage safely [5]. On the other hand, our work may help
+accelerate research on intelligible intelligence more broadly, and powerful future artificial intelligence
+is probably safer if we understand aspects of how it works than if it is an inscrutable black box.
+
+10
+
+References
+[1] Stuart Russell, Daniel Dewey, and Max Tegmark. Research priorities for robust and beneficial
+artificial intelligence. Ai Magazine, 36(4):105–114, 2015.
+[2] Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mané.
+Concrete problems in ai safety. arXiv preprint arXiv:1606.06565, 2016.
+[3] Margaret Boden, Joanna Bryson, Darwin Caldwell, Kerstin Dautenhahn, Lilian Edwards, Sarah
+Kember, Paul Newman, Vivienne Parry, Geoff Pegman, Tom Rodden, et al. Principles of
+robotics: regulating robots in the real world. Connection Science, 29(2):124–129, 2017.
+[4] Viktoriya Krakovna and Finale Doshi-Velez. Increasing the interpretability of recurrent neural
+networks using hidden markov models. arXiv preprint arXiv:1606.05320, 2016.
+[5] Stuart Russell. Human compatible: Artificial intelligence and the problem of control. Penguin,
+2019.
+[6] James P Crutchfield and Bruce S McNamara. Equation of motion from a data series. Complex
+systems, 1(417-452):121, 1987.
+[7] Saso Dzeroski and Ljupco Todorovski. Discovering dynamics: from inductive logic programming to machine discovery. Journal of Intelligent Information Systems, 4(1):89–108,
+1995.
+[8] Elizabeth Bradley, Matthew Easley, and Reinhard Stolle. Reasoning about nonlinear system
+identification. Artificial Intelligence, 133(1-2):139–188, 2001.
+[9] Pat Langley, Dileep George, Stephen D Bay, and Kazumi Saito. Robust induction of process
+models from time-series data. In Proceedings of the 20th International Conference on Machine
+Learning (ICML-03), pages 432–439, 2003.
+[10] Michael Schmidt and Hod Lipson. Distilling free-form natural laws from experimental data.
+science, 324(5923):81–85, 2009.
+[11] Randall K McRee. Symbolic regression using nearest neighbor indexing. In Proceedings of the
+12th annual conference companion on Genetic and evolutionary computation, pages 1983–1990.
+ACM, 2010.
+[12] Dominic P Searson, David E Leahy, and Mark J Willis. Gptips: an open source genetic
+programming toolbox for multigene symbolic regression. In Proceedings of the International
+multiconference of engineers and computer scientists, volume 1, pages 77–80. IMECS Hong
+Kong, 2010.
+[13] Renáta Dubčáková. Eureqa: software review. Genetic programming and evolvable machines,
+12(2):173–178, 2011.
+[14] Sean Stijven, Wouter Minnebo, and Katya Vladislavleva. Separating the wheat from the chaff: on
+feature selection and feature importance in regression random forests and symbolic regression. In
+Proceedings of the 13th annual conference companion on Genetic and evolutionary computation,
+pages 623–630. ACM, 2011.
+[15] Michael D Schmidt, Ravishankar R Vallabhajosyula, Jerry W Jenkins, Jonathan E Hood,
+Abhishek S Soni, John P Wikswo, and Hod Lipson. Automated refinement and inference of
+analytical models for metabolic networks. Physical biology, 8(5):055011, 2011.
+[16] Christopher Hillar and Friedrich Sommer. Comment on the article" distilling free-form natural
+laws from experimental data". arXiv preprint arXiv:1210.7273, 2012.
+[17] Bryan C Daniels and Ilya Nemenman. Automated adaptive inference of phenomenological
+dynamical models. Nature communications, 6:8133, 2015.
+[18] Pat Langley and Adam Arvay. Heuristic induction of rate-based process models. In Twenty-Ninth
+AAAI Conference on Artificial Intelligence, 2015.
+[19] Ignacio Arnaldo, Una-May O’Reilly, and Kalyan Veeramachaneni. Building predictive models via feature synthesis. In Proceedings of the 2015 Annual Conference on Genetic and
+Evolutionary Computation, pages 983–990, 2015.
+[20] Steven L Brunton, Joshua L Proctor, and J Nathan Kutz. Discovering governing equations
+from data by sparse identification of nonlinear dynamical systems. Proceedings of the National
+Academy of Sciences, 113(15):3932–3937, 2016.
+11
+
+[21] Matthew Guzdial, Boyang Li, and Mark O Riedl. Game engine learning from video. In IJCAI,
+pages 3707–3713, 2017.
+[22] Markus Quade, Markus Abel, J Nathan Kutz, and Steven L Brunton. Sparse identification of
+nonlinear dynamics for rapid model recovery. Chaos: An Interdisciplinary Journal of Nonlinear
+Science, 28(6):063116, 2018.
+[23] Maciej Koch-Janusz and Zohar Ringel. Mutual information, neural networks and the renormalization group. Nature Physics, 14(6):578, 2018.
+[24] Weiwei Kong, Christopher Liaw, Aranyak Mehta, and D Sivakumar. A new dog learns old
+tricks: Rl finds classic optimization algorithms. ICLR, 2018.
+[25] Silviu-Marian Udrescu and Max Tegmark. AI Feynman: A physics-inspired method for
+symbolic regression. Science Advances, 6(16):eaay2631, 2020.
+[26] Jiechun Liang and Xi Zhu. Phillips-inspired machine learning for band gap and exciton binding
+energy prediction. The journal of physical chemistry letters, 10(18):5640–5646, 2019.
+[27] Tailin Wu and Max Tegmark. Toward an artificial intelligence physicist for unsupervised
+learning. Physical Review E, 100(3):033311, 2019.
+[28] J. Rissanen. Modeling by shortest data description. Automatica, 14(5):465 – 471, 1978.
+[29] Marcus Hutter. A theory of universal artificial intelligence based on algorithmic complexity.
+arXiv preprint cs/0004001, 2000.
+[30] Peter D Grünwald, In Jae Myung, and Mark A Pitt. Advances in minimum description length:
+Theory and applications. MIT press, 2005.
+[31] Danilo Rezende and Shakir Mohamed. Variational inference with normalizing flows. In Francis
+Bach and David Blei, editors, Proceedings of the 32nd International Conference on Machine
+Learning, volume 37 of Proceedings of Machine Learning Research, pages 1530–1538, Lille,
+France, 07–09 Jul 2015. PMLR.
+[32] Laurent Dinh, Jascha Sohl-Dickstein, and Samy Bengio. Density estimation using real nvp.
+2017.
+[33] Durk P Kingma and Prafulla Dhariwal. Glow: Generative flow with invertible 1x1 convolutions.
+In S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett, editors,
+Advances in Neural Information Processing Systems 31, pages 10215–10224. Curran Associates,
+Inc., 2018.
+[34] Conor Durkan, Artur Bekasov, Iain Murray, and George Papamakarios. Neural spline flows.
+In H. Wallach et al, editor, Advances in Neural Information Processing Systems 32, pages
+7511–7522. Curran Associates, Inc., 2019.
+[35] I. Kobyzev, S. Prince, and M. Brubaker. Normalizing flows: An introduction and review of
+current methods. IEEE Transactions on Pattern Analysis and Machine Intelligence, pages 1–1,
+2020.
+[36] Silviu-Marian Udrescu and Max Tegmark. Symbolic pregression: Discovering physical laws
+from raw distorted video. arXiv preprint arXiv:2005.11212, 2020.
+
+12
+
+Supplementary material
+Below we provide additional technical details about how we implement our method and numerical
+experiments.
+
+A
+
+Testing for generalized symmetry
+
+b (x0 , x00 ) being independent of x00 . We will
+We showed that generalized symmetry can be revealed by v
+00
+now describe how we test for such x -independence numerically. Given a point xi ∈ Rk from our
+bj ≡ v
+bi (x0i , x00j ), where x00j ∈ Rn−k correspond to
+data set, we compute a set of normalized gradients v
+a sample of m other data points, and quantify the variation between then by the quantity
+m
+
+1 X
+bj )2 = 1 − max µ
+(b
+µ·v
+bt Vb
+µ,
+|µ|=1
+|µ|=1 m
+j=1
+
+V (x) ≡ 1 − max
+
+m
+
+where V ≡
+
+1 X
+bj v
+bjt .
+v
+m j=1
+
+(5)
+
+bj up to a sign.
+We can intuitively interpret the optimal µ
+b as maximally aligned with the vectors v
+Equation (5) implies that our variation measure V is simply one minus the smallest eigenvalue of
+1
+bj are identical to 1 − m
+V, so V ranges from 0 when all v
+when all eigenvalues are equal (equal to
+1/m, since tr V = 1). As illustrated in Figure 6, we compute V (xi ) for each subset of up to ng input
+variables, and select the subset with the smallest median V (xi ) as the most promising generalized
+symmetry candidate. In our numerical experiments, we set the hyperparameter ng = 3 to save time,
+since we do not wish to consider all 2n subsets for large n.
+
+f(x, y, z) = g[h(x, y), z]
+f(x, y, z) = g[h(y, z), x]
+f(x, y, z) = g[h(z, x), y]
+
+10-8
+
+10-7
+
+10-6
+
+10-4
+V(x)
+
+10-5
+
+10-3
+
+10-2
+
+10-1
+
+1
+
+Figure 6: Distribution of V (xi ) for the function from Figure 2, revealing that evidence for
+the generalized symmetry f (x, y, z) = g[h(x, y), z] (shaded distribution) is stronger than for
+f (x, y, z) = g[h(x, z), y] (blue curve) or f (x, y, z) = g[h(y, z), x] (red curve). The curves are
+shown slightly smoothed for clarity.
+
+B
+
+Testing for generalized additivity
+
+We showed that generalized additivity holds when the function s(x1 , x2 ) from Equation (3) from
+the main part of the paper is multiplicatively separable. We will now describe how we test for
+such separability numerically. s(x1 , x2 ) being multiplicative separable is equivalent to f (x1 , x2 ) ≡
+ln s(x1 , x2 ) being additively separable. We numerically test the function ln sN N (x1 , x2 ) for additive
+separability using the normalized score S defining
+S[f ] =
+
+|f,xy |2
+.
+|f,xx f,yy | + |f,xy |2
+
+(6)
+
+It is easy to see that S[f ] = 0 if f is additively separable, and S[f ] > 0 otherwise. If the median
+value of S over all points xi in the dataset is below a threshold S∗ , we take this as evidence for
+generalized additivity and proceed as below. We found empirically that the threshold choise S∗ = 0.1
+produced robust results. It is important to use smooth (not, e.g., ReLU) activation functions for this
+derivative-based test to be useful.
+If this property holds, then we recursively apply our algorithm to the two new 1-dimensional symbolic
+regression problems of discovering a(x1 ) and b(x2 ). If this succeeds and we are able to discover the
+13
+
+FDSR basic 100
+FDSR harder 20
+12 modular equations
+10 probability distributions
+
+Schmidt & Lipson 2009
+71%
+15%
+42%
+60%
+
+Udrescu & Tegmark 2020
+100%
+85%
+42%
+70%
+
+This paper
+100%
+90%
+100%
+80%
+
+Table 6: Fraction of symbolic regression problems solved for the benchmarks in the Feynman
+Database for Symbolic Regression (FDRS) and this paper.
+
+functions g(x1 ) and h(x2 ) by symbolically integrating our solutions g 0 = a and h0 = 1/b, then we
+have reduced the original problem to the same state as when we found compositionality above, now
+with h(x1 , x2 ) = g(x1 ) + h(x2 ). Just as in that case, we simply replace the variables x in the original
+mystery data table by the single variable h(x) and recursively apply our AI Feynman algorithm to the
+new 1-dimensional symbolic regression problem of discovering how f depends on h.
+If we have determined that generalized additivity holds but the aforementioned method for discovering
+g(x1 ) + h(x2 ) fails, we make a second attempt by training a neural network of the modular form
+fNN (x1 , x2 ) = F [g(x1 ) + h(x2 )] to fit the data. If this succeeds, we then recursively apply our AI
+Feynman algorithm to the three new 1-dimensional symbolic regression problems of discovering F ,
+g and h.
+
+C
+
+Further details on success and failure modes
+
+Our paper reports which symbolic regression problems our method succeeded and failed on, as
+detailed in Tables 6-8. Here we add specifics on how these successes and failures occurred.
+Success definition Given a data set {x1 , ..., xn , y}, we use 90% of the data to compute a Paretooptimal set of candidate functions f˜i (x), then rank them based on their MEDL accuracy on the
+held-back 10% of the data. We count our method as successful only if the top-ranked function
+matches the true f (x) exactly, or, if the definition of f involves irrational numerical parameters, if
+these parameters are recovered to better than 0.01% relative accuracy.
+We considered an equation solved even if the top solution was not in the exact form presented in
+our tables, but mathematically equivalent. For example, our method predicted that Equation (12)
+in Table 4 was w = cos[arccos(x) + arccos(y) + arccos(z)], which is mathematically equivalent
+within the domain of our provided data set, where x, y, z ∈ [−1, 1].
+For the problem of density estimation from samples, our goal was to obtain the correct normalized
+probability distributions. The candidate functions on the Pareto-frontier were therefore discarded
+unless they were non-negative and normalizable. The surviving candidates were then normalized to
+integrate to unity by symbolic/numerical integration to obtain the appropriate normalization constant,
+and quality-ranked by the surprisal loss function
+X
+Li = −
+log f˜i (xk )
+evaluated on the held-back test data.
+Success examples Tables 7 and 8 below show the highest noise level allowing each of the 100
+equations from the Feynman Database for Symbolic regression to be solved in the original paper
+analyzing it and in the present paper.
+For many of the solved equations, the modularity discovery had to be used multiple times in order for
+the correct equation to be discovered, reflecting the power of the recursive algorithm. For example,
+for the quadruple velocity addition equation in Table 4, generalized symmetry was exploited twice.
+v1 +v2
+First, the code discovered that the first two velocities only enter in the combination 1+v
+, and these
+1 v2
+two variables were replaced by a new variable v12 . The same method then discovered that v12 and
+v12 +v3
+v3 only enter in that same combination 1+v
+, and thus the initial 3 variables v1 , v2 and v3 were
+12 v3
+replaced by a single variable v123 . Now the remaining equation had only 2 variables left, and was
+solved by brute force. In principle, this recursive method can be used to discover relativistic addition
+of an arbitrary number of velocities, by reducing the number of variables by one at each step.
+14
+
+Failure examples Some of the most obvious failure modes we discussed in the conclusions of
+the main text. Here we discuss some more subtle failure modes. Firstly, it is worth noting that our
+definition of complexity is dependent on the chosen set of operations and does not always match our
+intuition. For example, in fitting the probability distribution
+1 2 −r
+r e cos2 θ
+16
+of electron positions in the n = 2, l = 1, m = 0 hydrogen orbital, solutions with θ-dependence
+cos (cos θ) are preferred over cos2 θ. This is because, up to additive and multiplcative prefactors,
+the two formulas differ by at most approximately 2 × 10−2 over our parameter range, but given a
+set of operations that includes only {×, cos} denoted by "∗" and “C" respectively in reverse Polish
+notation, cos (cos θ)) (encoded as“xCC") is simpler than cos2 θ (encoded as “xCxC ∗ ”). In the
+presence of the imprecisions introduced by the normalizing flow, we were unable to perform the
+density estimation a level at which the accuracy for the correct cos2 θ was preferred over the simpler
+alternative.
+p(r, θ) =
+
+Furthermore, more interpretable approximations (e.g. Taylor expansions) are not always favored by
+our definition of complexity. For example, in Figure 1, the unfamiliar solution
+
+
+1
+−1
+mc2
+cos v/c
+
+
+2
+1
+2
+√
+−
+1
+intermediate to the more familiar mv
+and
+mc
+of can be understood as a fourth2
+1−v 2 /c2
+
+
+2
+1
+2
+√
+order expansion about v = 0 of the exact formula. Specifically, mc
+− 1 = mv
+2 +
+1−v 2 /c2
+
+
+2
+3mv 4
+1
+5mv 4
+2
+6
+6
+and
+mc
++
+O(v
+),
+−
+1
+= mv
+8c2
+cos v/c
+2 + 24c2 + O(v ). The Taylor expansions themselves
+are not preferred for reasons of complexity.
+
+15
+
+Feynman eq.
+I.6.20a
+I.6.20
+I.6.20b
+I.8.14
+I.9.18
+I.10.7
+
+Equation
+√
+2
+f = e−θ /2 / 2π
+2
+√
+− θ
+f = e 2σ2 / 2πσ 2
+(θ−θ1 )2 √
+−
+2σ 2
+f =p
+e
+/ 2πσ 2
+d = (x2 − x1 )2 + (y2 − y1 )2
+Gm1 m2
+F = (x2 −x1 )2 +(y
+2
+2
+2 −y1 ) +(z2 −z1 )
+m
+0
+m= r
+2
+
+Old Noise tolerance
+10−2
+
+New Noise tolerance
+10−1
+
+10−4
+
+10−2
+
+10−4
+10−4
+10−5
+10−4
+
+10−2
+10−1
+10−3
+10−2
+
+1− v2
+c
+
+I.11.19
+I.12.1
+I.12.1a
+I.12.2
+I.12.4
+I.12.5
+I.12.11
+I.13.12
+I.14.3
+
+A = x1 y1 + x2 y2 + x3 y3
+F = µNn
+K = 12 m(v 2 + u2 + w2 )
+q1 q2
+F = 4πr
+2
+q1
+U = 4πr
+2
+F = q2 Ef
+F = q(Ef + Bv sin θ)
+U = Gm1 m2 ( r12 − r11 )
+U = mgz
+
+10−3
+10−3
+10−4
+10−2
+10−2
+10−2
+10−3
+10−4
+10−2
+
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+
+I.14.4
+I.15.3x
+
+U = spring
+2
+x1 = √ x−ut
+2
+2
+
+x2
+
+10−2
+10−3
+
+10−1
+10−3
+
+I.15.3t
+
+t1 = √t−ux/c
+2
+2
+
+10−4
+
+10−3
+
+−4
+
+10
+
+10−1
+
+10−3
+10−2
+10−3
+10−3
+10−4
+10−2
+10−2
+10−2
+
+10−2
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+
+I.15.1
+I.16.6
+I.18.4
+I.18.12
+I.18.14
+I.24.6
+I.25.13
+I.26.2
+I.27.6
+
+k
+
+1−u /c
+2
+
+p= √
+
+1−u /c
+m0 v
+
+1−v 2 /c2
+u+v
+v1 = 1+uv/c
+2
+m1 r1 +m2 r2
+r = m1 +m2
+
+τ = rF sin θ
+L = mrv sin θ
+E = 14 m(ω 2 + ω02 )x2
+Ve = Cq
+θ1 = arcsin(n sin θ2 )
+1
+ff = 1 +
+n
+d1
+
+d2
+
+I.29.4
+I.29.16
+I.30.3
+I.30.5
+I.32.5
+I.32.17
+I.34.8
+I.34.10
+I.34.14
+
+ω
+k=p
+c
+x = x21 + x22 − 2x1 x2 cos(θ1 − θ2 )
+I∗ = I∗0 sin(nθ/2)
+sin(θ/2)
+λ
+θ = arcsin( nd
+)
+q 2 a2
+P = 6π3
+c
+P = ( 12 cEf2 )(8πr2 /3)(ω 4 /(ω 2 − ω02 )2 )
+ω = qvB
+p
+1+v/c
+ω = 1−v/c
+ω0
+ω = √1+v/c
+ω0
+2
+2
+
+10−2
+10−4
+10−3
+10−3
+10−2
+10−4
+10−2
+10−3
+10−3
+
+10−1
+10−3
+10−3
+10−1
+10−1
+10−3
+10−1
+10−2
+10−3
+
+I.34.27
+I.37.4
+I.38.12
+I.39.10
+I.39.11
+I.39.22
+I.40.1
+I.41.16
+
+E = ~ω
+√
+I∗ = I1 + I2 + 2 I1 I2 cos δ
+2
+r = 4π~
+mq 2
+E = 32 pF V
+1
+E = γ−1
+pF V
+nkb T
+PF = V
+− mgx
+n = n0 e kb T
+~ω 3
+Lrad =
+~ω
+
+10−2
+10−3
+10−2
+10−2
+10−3
+10−4
+10−2
+10−5
+
+10−1
+10−2
+10−1
+10−1
+10−1
+10−1
+10−1
+10−4
+
+I.43.16
+I.43.31
+I.43.43
+I.44.4
+
+10−2
+10−2
+10−3
+10−3
+
+10−1
+10−1
+10−1
+10−1
+
+I.47.23
+
+v = drifdt e
+D = µe k b T
+1 kb v
+κ = γ−1
+A
+E = nkb T ln( VV12 )
+q
+c = γpr
+ρ
+
+10−2
+
+10−1
+
+I.48.2
+
+E = √ mc2
+
+10−5
+
+10−3
+
+I.50.26
+
+x = x1 [cos(ωt) + α cos(ωt)2 ]
+
+10−2
+
+10−1
+
+1−v /c
+
+µ
+
+π 2 c2 (e kb T −1)
+qV
+
+2
+
+1−v /c2
+
+Table 7: Tested 16
+Equations, part 1
+
+Feynman eq.
+II.2.42
+II.3.24
+II.4.23
+II.6.11
+II.6.15a
+II.6.15b
+II.8.7
+
+Equation
+1 )A
+P = κ(T2 −T
+d
+P
+FE = 4πr2
+q
+Ve = 4πr
+1 pd cos(θ)
+Ve = 4π r2p
+3 pd z
+Ef = 4π
+x2 + y 2
+r5
+3 pd
+Ef = 4π
+cos
+θ sin θ
+r3
+2
+3 q
+E = 5 4πd
+
+II.8.31
+II.10.9
+II.11.3
+
+Eden = 2 f
+1
+Ef = σden
+ 1+χ
+qEf
+x = m(ω2 −ω2 )
+
+II.11.7
+
+n = n0 (1 +
+
+Old Noise tolerance
+10−3
+10−2
+10−2
+10−3
+10−3
+10−2
+10−2
+
+E 2
+
+0
+
+pd Ef cos θ
+)
+kb T
+
+nρ p2d Ef
+
+New Noise tolerance
+10−1
+10−1
+10−1
+10−1
+10−2
+10−2
+10−1
+
+10−2
+10−2
+10−3
+
+10−1
+10−1
+10−2
+
+10−2
+
+10−1
+
+II.11.20
+II.11.27
+II.11.28
+II.13.17
+II.13.23
+
+P∗ = 3kb T
+nα
+P∗ = 1−nα/3
+Ef
+nα
+θ = 1 + 1−(nα/3)
+1 2I
+B = 4πc
+2
+ρ r
+ρc = √ c02 2
+
+10−3
+10−3
+10−4
+10−2
+10−4
+
+10−1
+10−1
+10−2
+10−1
+10−2
+
+II.13.24
+
+j = √ c0 2
+
+10−4
+
+10−1
+
+II.15.4
+II.15.5
+II.21.32
+
+10−3
+10−3
+10−3
+
+10−1
+10−1
+10−1
+
+II.24.17
+II.27.16
+II.27.18
+II.34.2a
+II.34.2
+II.34.11
+II.34.29a
+II.34.29b
+II.35.18
+II.35.21
+II.36.38
+II.37.1
+II.38.3
+II.38.14
+III.4.32
+
+E = −µM B cos θ
+E = −pd Ef cos θ
+q
+Ve = 4πr(1−v/c)
+q
+2
+2
+k = ωc2 − πd2
+FE = cEf2
+Eden = Ef2
+qv
+I = 2πr
+µM = qvr
+2
+_ qB
+ω = g2m
+qh
+µM = 4πm
+g_ µM BJz
+E=
+~
+n0
+n = exp(µm B/(kb T ))+exp(−µ
+m B/(kb T ))
+µM B
+M = nρ µM tanh( kb T )
+f = µkmb TB + µcm2 kαM
+bT
+E = µM (1 + χ)B
+F = Y dAx
+Y
+µS = 2(1+σ)
+n = ~ω1
+
+10−5
+10−2
+10−2
+10−2
+10−2
+10−4
+10−2
+10−4
+10−2
+10−4
+10−2
+10−3
+10−3
+10−3
+10−3
+
+10−2
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+10−1
+10−2
+10−4
+10−1
+10−1
+10−1
+10−1
+10−2
+
+III.4.33
+
+E=
+
+10−3
+
+10−3
+
+10−2
+10−3
+
+10−1
+10−3
+
+10−3
+
+10−1
+
+L = n~
+2
+k
+v = 2Ed
+~
+
+10−4
+10−3
+10−4
+
+10−1
+10−1
+10−1
+
+III.14.14
+III.15.12
+III.15.14
+III.15.27
+III.17.37
+III.19.51
+
+I = I0 (e kb T − 1)
+E = 2U (1 − cos(kd))
+~2
+m = 2Ed
+2
+2πα
+k = nd
+f = β(1 + α cos θ)
+−mq 4
+1
+E = 2(4π)
+2 ~ 2 n2
+
+10−3
+10−4
+10−2
+10−3
+10−3
+10−5
+
+10−1
+10−1
+10−1
+10−1
+10−1
+10−2
+
+III.21.20
+
+j=
+
+10−2
+
+10−1
+
+III.7.38
+III.8.54
+III.9.52
+III.10.19
+III.12.43
+III.13.18
+
+1−v /c
+ρ v
+
+1−v /c2
+
+e kb T −1
+~ω
+~ω
+
+e kb T −1
+B
+ω = 2µM
+~
+2
+pγ = sin( Et
+~ )
+pd Ef t
+sin((ω−ω )t/2)2
+pγ = ~ ((ω−ω0 )t/2)0 2
+q
+E = µM Bx2 + By2 + Bz2
+
+qVe
+
+−ρc0 qAvec
+m
+
+17
+Table 8: Tested Equations, part 2.
+

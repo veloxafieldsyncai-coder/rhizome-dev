@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# ML training artifacts (large / reproducible — never commit weights)
+spikes/**/adapter-*/
+*.safetensors
+*.bin
+*.pt
+*.gguf
+*.log
+
+# Model / HF caches (the shared cache lives outside the repo; ignore any local)
+**/.cache/
+hf-cache/
+cache/
+
+# Forked intake tool — separate upstream git history (Ar9av/obsidian-wiki).
+# Tracked separately; will formalize as a submodule once our own fork exists.
+fork-obsidian-wiki/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json

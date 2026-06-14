@@ -1,0 +1,21 @@
+{
+  "_comment": "Role -> model mapping the Rhizome agent reads. NOT limited to these models or roles. Any Ollama tag works; add/rename roles freely; 'provider' allows non-Ollama backends later. Edit by hand or use `python -m rhizome.models`.",
+  "default_provider": "ollama",
+  "roles": {
+    "general": {
+      "model": "qwen3:30b-a3b",
+      "provider": "ollama",
+      "note": "everyday agent, all projects"
+    },
+    "physics": {
+      "model": "qwq:32b",
+      "provider": "ollama",
+      "note": "governing-equation derivation, symbolic math"
+    },
+    "coding": {
+      "model": "qwen3-coder:30b",
+      "provider": "ollama",
+      "note": "building the engine"
+    }
+  }
+}

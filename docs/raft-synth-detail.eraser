@@ -1,0 +1,48 @@
+direction down
+styleMode shadow
+colorMode pastel
+typeface clean
+
+title Rhizome — RAFT Data Synthesis (detail)
+
+Vault [icon: database, label: "VAULT — changed pages only (manifest delta)", color: green]
+
+Synth [icon: python, label: "RAFT Synthesizer (our build · deterministic)", color: orange] {
+
+  Chunk [icon: file, label: "1 · Chunk — split pages on ## sections = golden + retrieval unit"]
+
+  MCP [icon: terminal, label: "Rhizome MCP server (stdio) — tools: get_chunk · write_qa_pair · validate_citation", color: gray]
+
+  Generation [icon: gcp-vertexai, label: "Steps 2–3 · Generation — SWAPPABLE: Claude-via-MCP (subscription) now → local model later", color: purple] {
+    Claude [icon: gcp-vertexai, label: "Claude Pro/Max — Agent SDK, OAuth token (subscription), NOT API"]
+    QGen [icon: file, label: "2 · Question-gen — N≈3 per chunk, answerable from it"]
+    AGen [icon: file, label: "3 · Answer-gen — CoT + verbatim ##quote## + ##Answer:"]
+  }
+
+  Distractors [icon: search, label: "4 · Distractor sample — k≈4: retriever hard-negatives + random"]
+
+  Assemble [icon: python, label: "5 · Assemble (P split) — 80% golden+distractors · 20% distractors-only · shuffle"]
+
+  QC [icon: grafana, label: "6 · Citation QC — quote must appear verbatim, else drop/regenerate"]
+
+  Split [icon: folder, label: "7 · Split by source page — no leak across train/eval"]
+}
+
+TrainJSONL [icon: file, label: "train.jsonl → Trainer", color: blue]
+EvalJSONL [icon: file, label: "eval.jsonl → keep-or-revert Gate", color: red]
+
+// pipeline (deterministic) owns the corpus; Claude reaches in via MCP only to generate
+Vault > Chunk: section chunks
+Chunk > MCP: chunk pool + golden
+MCP > Claude: get_chunk (subscription via MCP, not API)
+Claude > QGen: generate
+QGen > AGen: (question, golden)
+AGen > MCP: write_qa_pair
+MCP > Distractors: generated pairs
+Chunk > Distractors: chunk pool
+Distractors > Assemble: + k distractors
+Assemble > QC: candidate examples
+QC --> Claude: reject → regenerate
+QC > Split: clean examples
+Split > TrainJSONL: ~90%
+Split > EvalJSONL: ~10%
