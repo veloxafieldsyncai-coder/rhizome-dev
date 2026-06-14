@@ -1,0 +1,4 @@
+# Rhizome basis: synth engine (stdlib only) + MCP server.
+# Training deps (gfx1151 nightly torch, transformers, peft) install separately in
+# spikes/amd-lora; see COMPUTE.md for the AMD setup.
+mcp>=1.0

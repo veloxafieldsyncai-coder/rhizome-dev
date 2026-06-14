@@ -1,0 +1,10 @@
+{
+  "_comment": "Rhizome MCP server. Any MCP client (a Claude Code session here, or the user's frontier model via its own config) gets rhizome's tools: vault_status, list_chunks, submit_qa, build_dataset, clear_qa, add_page, training_command. Paths are absolute for this dev box; adjust per machine.",
+  "mcpServers": {
+    "rhizome": {
+      "command": "/srv/project/code/rhizome-dev/spikes/amd-lora/.venv/bin/python",
+      "args": ["-m", "rhizome.mcp_server"],
+      "cwd": "/srv/project/code/rhizome-dev"
+    }
+  }
+}
