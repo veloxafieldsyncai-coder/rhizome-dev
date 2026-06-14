@@ -1,6 +1,7 @@
 ---
 title: Strix Halo Compute — local 30B training on AMD
 category: references
+layer: research
 tags: [hardware, amd, rocm, training, strix-halo]
 summary: How to train and serve a 30B model on the AMD Strix Halo box — GPU access, 80GB GTT, the streaming loader that beats the unified-memory load OOM.
 sources: [COMPUTE.md]

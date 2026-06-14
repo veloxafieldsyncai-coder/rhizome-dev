@@ -1,6 +1,7 @@
 ---
 title: RAFT — Retrieval-Augmented Fine-Tuning
 category: references
+layer: research
 tags: [raft, fine-tuning, rag, training]
 summary: RAFT fine-tunes a model to excel at RAG over a fixed domain by training on questions with golden + distractor docs and cited chain-of-thought answers.
 sources: [papers/RAFT.pdf, https://arxiv.org/abs/2403.10131]

@@ -19,6 +19,8 @@ def main():
     ap.add_argument("--k-distractors", type=int, default=4)
     ap.add_argument("--p-golden", type=float, default=0.8)
     ap.add_argument("--eval-frac", type=float, default=0.1)
+    ap.add_argument("--cross-top", type=int, default=1,
+                    help="research chunks paired per note for cross layer examples")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -27,7 +29,7 @@ def main():
 
     stats = run_synth(args.vault, args.out, gen,
                       k_distractors=args.k_distractors, p_golden=args.p_golden,
-                      eval_frac=args.eval_frac, seed=args.seed)
+                      eval_frac=args.eval_frac, cross_top=args.cross_top, seed=args.seed)
     print("RAFT synth complete:")
     for k, v in stats.items():
         print(f"  {k}: {v}")
