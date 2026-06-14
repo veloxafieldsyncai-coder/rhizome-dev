@@ -42,8 +42,16 @@ group `render`.
   pip uninstall -y bitsandbytes torchao torchvision   # these CRASH on gfx1151
   ```
 - Verified: `torch 2.12.0a0+rocm7.13`, `hip 7.13`, `transformers 5.12`, `peft 0.19`.
-- **bf16 LoRA, NOT QLoRA.** bitsandbytes/torchao crash on import; Unsloth doesn't detect ROCm; Swift
-  needs distributed ops that aren't present. The 91 GB unified memory makes 4-bit unnecessary anyway.
+- **bf16 LoRA, NOT QLoRA (tested 2026-06-14).** QLoRA was investigated to free memory for running two
+  models. Result: it does not work on this box as set up. bitsandbytes 0.49.2 installs and detects ROCm,
+  but (1) its prebuilt kernels are not built for gfx1151, so a real 4-bit quantize throws
+  `hipErrorInvalidKernelFile`; and (2) building bnb from source is blocked because the pip ROCm SDK
+  (`_rocm_sdk_core` / `_rocm_sdk_libraries_gfx1151`) ships ZERO cmake config files, so bnb's
+  `find_package(hip)`/`find_package(rocblas)` cannot configure (we do have `hipcc` + `librocblas.so.5`).
+  No `bitsandbytes-rocm` wheel on PyPI. To get QLoRA later: use a community Strix Halo bnb wheel
+  (e.g. kyuz0's toolbox) or a full system ROCm install (provides the cmake configs) then build bnb for
+  gfx1151. Until then, **bf16 LoRA is the proven path** (the 91 GB unified memory makes it workable),
+  and the only cost is one ~30B trains at a time. torchao/Unsloth/Swift also do not work here.
 
 ### Required env for every GPU run
 ```bash
