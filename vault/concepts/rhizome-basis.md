@@ -4,7 +4,7 @@ category: concepts
 layer: research
 tags: [rhizome, architecture, raft, knowledge-base]
 summary: The Rhizome basis is a markdown vault plus a local model RAFT-tuned on it; RAG-grounded, trained as knowledge grows.
-sources: [docs/basis-architecture.eraser, docs/rhizome-fork-strategy.md]
+sources: [docs/rhizome-system.eraser, docs/rhizome-fork-strategy.md]
 lifecycle: active
 created: 2026-06-14
 updated: 2026-06-14

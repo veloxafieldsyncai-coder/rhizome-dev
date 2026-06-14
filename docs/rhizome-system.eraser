@@ -1,0 +1,79 @@
+direction down
+styleMode shadow
+colorMode pastel
+typeface clean
+
+title Rhizome Basis: two-substrate RAFT training, and the bridge to Innovation
+
+// ========================================================================
+// 1. THE VAULT: one corpus, two substrates (the layer: field)
+// ========================================================================
+Vault [icon: database, label: "VAULT: git-tracked markdown corpus. Knowledge is compiled once into pages; every edit is a commit, so teammates see what was added. chunk_vault() reads each page's layer: field.", color: green] {
+  Research [icon: document, label: "RESEARCH substrate (layer: research). Vetted external truth: papers, specs, regulations, textbooks. Treated as ground truth."]
+  Brainstorm [icon: user, label: "BRAINSTORM substrate (layer: brainstorm, under vault/notes). The user's own provisional thinking: hypotheses, design notes, dead ends, open questions."]
+}
+
+// ========================================================================
+// 2. THE SYNTH ENGINE (rhizome/synth): turns the vault into RAFT data.
+//    Deterministic Python owns structure; the model only PROPOSES Q/A.
+// ========================================================================
+Synth [icon: python, label: "SYNTH ENGINE (rhizome/synth, run_synth). Deterministic stages below control structure; only the generator calls a model.", color: orange] {
+  Chunk [icon: file, label: "chunk_vault(): split each page on H2 headings into chunks. Every chunk keeps its layer (research or brainstorm)."]
+
+  Generator [icon: gcp-vertexai, label: "GENERATOR: Claude on the user's subscription via MCP (swappable to a local model later). Proposes Q/A, BRANCHED BY LAYER.", color: purple] {
+    ResearchQA [icon: terminal, label: "research_qa(): assert the fact and quote the source VERBATIM inside ##begin_quote## .. ##end_quote##. Teaches: research is ground truth."]
+    NoteQA [icon: terminal, label: "note_qa(): attribute to the user ('your notes propose ...'), never assert as fact. Also emits an ungrounded-flag answer that refuses to assert from notes alone."]
+    CrossQA [icon: terminal, label: "cross_qa(): reason OVER a note while grounding every factual claim in a VERBATIM research citation. Teaches inference across the two layers."]
+  }
+
+  Distract [icon: search, label: "sample_distractors() + retrieve_related(): add k hard+random distractors, and pair each note with the most related research for cross-layer examples."]
+  Assemble [icon: python, label: "assemble(): prefix every doc with its tag [RESEARCH] or [NOTE] (this tag is the signal the model reads at inference). Applies the ASYMMETRIC P split."]
+  QC [icon: grafana, label: "citation_ok(): every quoted span must appear VERBATIM in a golden chunk, else the example is dropped. Verbatim is reserved for research only."]
+  Split [icon: folder, label: "split_by_page(): hold out the eval set by source page so no chunk leaks across train and eval."]
+}
+
+TrainData [icon: file, label: "train.jsonl + eval.jsonl", color: blue]
+
+// ========================================================================
+// 3. WHY the two substrates (reason and function of the design)
+// ========================================================================
+Why [label: "WHY THIS DESIGN: Research is ground truth (verbatim, citeable); brainstorm is provisional (attributed, reasoned-over). The ASYMMETRIC P split is the structural guarantee: research is internalized into weights (20 percent of examples drop the golden), but a note is ALWAYS kept in context and never memorized as fact. So the user can speculate freely and the model still cannot assert a hunch as truth. This grounding discipline is what makes the basis safe for nuclear and mining.", color: red]
+
+// ========================================================================
+// 4. TRAINING and SERVING (the proven local loop)
+// ========================================================================
+Train [icon: pytorch, label: "train_raft_lora.py + streaming_load.py: bf16 LoRA on Qwen3-30B-A3B, completion-only loss masking. Proven locally on the AMD Strix Halo box (COMPUTE.md).", color: orange]
+Model [icon: pytorch, label: "Local model: pristine base 30B plus the RAFT adapter (base stays read-only and shared).", color: purple]
+Serve [icon: server, label: "SERVE: retrieve from BOTH substrates, tag each doc, and the model answers. It asserts and cites research, but attributes notes as the user's provisional thinking."]
+User [icon: users, label: "User and their R&D project"]
+
+// ========================================================================
+// 5. HOW IT MAPS INTO RHIZOME INNOVATION (V2)
+// ========================================================================
+Innovation [icon: cloud, label: "RHIZOME INNOVATION (V2): reads the SAME vault. The two basis substrates are the bottom two rungs of the epistemic ladder.", color: blue] {
+  Ladder [icon: document, label: "Promotion ladder: brainstorm -> hypothesis -> frontier -> principle. Each gate costs evidence and explicit structure."]
+  Match [icon: search, label: "Structural matcher + nondimensionalization: connect matured principles across disciplines (the innovation engine)."]
+}
+
+// ---- flows ----
+Research > Chunk: research chunks
+Brainstorm > Chunk: note chunks
+Chunk > Generator: chunk + its layer
+Generator > Distract: proposed Q/A by kind
+Distract > Assemble: + distractors and paired research
+Assemble > QC: tagged candidate example
+QC > Split: verbatim-valid examples
+Split > TrainData
+Assemble -- Why: P split = the guarantee
+TrainData > Train
+Train > Model: trained adapter
+User > Serve: question
+Research > Serve: retrieved, cited verbatim
+Brainstorm > Serve: retrieved, attributed
+Serve > Model: question + tagged context
+Model > Serve: grounded answer
+Serve > User: asserts research, attributes notes
+
+// ---- bridge to V2 ----
+Brainstorm --> Ladder: provisional ideas climb (V2)
+Research --> Match: grounded threads matched (V2)

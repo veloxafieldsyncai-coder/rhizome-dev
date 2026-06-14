@@ -36,7 +36,7 @@ private document collection*: study **with the book open**.
 
 It unifies "RAG now / fine-tune later" into one mechanism, and its cite-verbatim + distractor
 robustness directly counter model collapse / hallucination. See [[rhizome-basis]]. The synth
-pipeline that builds RAFT data from the vault is documented in `docs/raft-synth-detail.eraser`.
+pipeline that builds RAFT data from the vault is documented in `docs/rhizome-system.eraser`.
 
 ## Related
 
