@@ -1,0 +1,5 @@
+{
+  "_comment": "Rhizome basis config. vault_path is relative to the repo root.",
+  "vault_path": "vault",
+  "categories": ["concepts", "references", "skills", "projects"]
+}
