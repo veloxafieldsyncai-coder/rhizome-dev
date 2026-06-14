@@ -31,3 +31,6 @@ fork-obsidian-wiki/
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# Generated training data (reproducible from vault + generator)
+data/
